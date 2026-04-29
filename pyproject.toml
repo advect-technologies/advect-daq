@@ -1,0 +1,16 @@
+[project]
+name = "advect-daq"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "adafruit-blinka>=9.1.0",
+    "adafruit-circuitpython-ina228>=2.0.5",
+    "aiofiles>=25.1.0",
+    "daq-tools",
+    "daqhats>=1.4.1.0",
+]
+
+[tool.uv.sources]
+daq-tools = { git = "https://github.com/advect-technologies/daq-tools.git" }
