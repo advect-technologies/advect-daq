@@ -19,19 +19,19 @@ class SensorConfig:
     interval: float = 1.0
     measurement: str = ""
     tags: Dict[str, str] = field(default_factory=dict)
-    extra: Dict[str, Any] = field(default_factory=dict)   # catch-all for sensor-specific config
+    enabled: bool = True                     # ← New
+    extra: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.measurement and self.name:
             self.measurement = self.name
-
 
 @dataclass
 class AdvectConfig:
     writer: WriterConfig
     sensors: List[SensorConfig]
     global_tags: Dict[str, str] = field(default_factory=dict)
-    ingestor_config: str = "data_config.toml"   # New field
+    ingestor_config: str = "data_config.toml"
 
     @classmethod
     def from_toml(cls, path: str | Path = "config/sensors.toml") -> "AdvectConfig":
@@ -52,7 +52,6 @@ class AdvectConfig:
         )
 
         global_tags = global_data.get("tags", {})
-
         ingestor_config = global_data.get("ingestor_config", "data_config.toml")
 
         sensor_data = data.get("sensors", [])
@@ -73,10 +72,10 @@ class AdvectConfig:
                 interval=float(s.get("interval", 1.0)),
                 measurement=s.get("measurement", ""),
                 tags=s.get("tags", {}),
+                enabled=s.get("enabled", True),          # ← New
             )
 
-            # Catch-all for sensor-specific fields
-            known_keys = {"type", "name", "interval", "measurement", "tags"}
+            known_keys = {"type", "name", "interval", "measurement", "tags", "enabled"}
             sensor_config.extra = {k: v for k, v in s.items() if k not in known_keys}
 
             sensors.append(sensor_config)
@@ -85,5 +84,5 @@ class AdvectConfig:
             writer=writer_config,
             sensors=sensors,
             global_tags=global_tags,
-            ingestor_config=ingestor_config            
+            ingestor_config=ingestor_config
         )

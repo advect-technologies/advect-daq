@@ -25,9 +25,14 @@ class BaseSensor(ABC):
         self.name: str = config.name
         self.interval: float = config.interval
         self.measurement: str = config.measurement or config.name
+        self.enabled: bool = config.enabled
 
-        # Merge global + per-sensor tags
-        self.tags: Dict[str, str] = {**global_tags, **config.tags}
+        # Merge global tags + per-sensor tags + auto-add sensor name
+        self.tags: Dict[str, str] = {
+            **global_tags,
+            **config.tags,
+            "sensor": config.name                               # ← Auto-added
+        }
 
         if not self.name:
             raise ValueError(f"Sensor of type '{self.SENSOR_TYPE}' is missing a name")
