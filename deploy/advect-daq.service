@@ -1,0 +1,24 @@
+## replace <usr> with actual user
+## Assume running on raspberry Pi
+
+[Unit]
+Description=Daq + router
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<usr>
+Group=<usr>
+WorkingDirectory=/home/<usr>/advect-daq
+ExecStart=/home/<usr>/.local/bin/uv run run.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Optional: Increase limits if needed
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
