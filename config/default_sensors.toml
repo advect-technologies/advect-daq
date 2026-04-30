@@ -1,0 +1,22 @@
+[global]
+tags = { location = "AdvectTechnologies", environment = "test" }
+# ingestor_config = "config/data_config.toml"
+
+[global.writer]
+output_dir = ".test-data"
+batch_size = 100
+flush_interval = 30.0
+
+[[sensors]]
+type = "random_walk"
+name = "test_sensor_1"
+measurement = "random_walk"
+interval = 10
+enabled = true
+
+[[sensors]]
+type = "random_walk"
+measurement = "random_walk"
+name = "test_sensor_2"
+interval = 10
+enabled = true

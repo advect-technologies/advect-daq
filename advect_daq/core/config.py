@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
 import tomllib
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,25 +22,33 @@ class SensorConfig:
     interval: float = 1.0
     measurement: str = ""
     tags: Dict[str, str] = field(default_factory=dict)
-    enabled: bool = True                     # ← New
+    enabled: bool = True
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.measurement and self.name:
             self.measurement = self.name
 
+
 @dataclass
 class AdvectConfig:
     writer: WriterConfig
     sensors: List[SensorConfig]
     global_tags: Dict[str, str] = field(default_factory=dict)
-    ingestor_config: str = "data_config.toml"
+    ingestor_config: str = "config/data_config.toml"
 
     @classmethod
     def from_toml(cls, path: str | Path = "config/sensors.toml") -> "AdvectConfig":
         path = Path(path)
+
+        # === Handle sensors.toml fallback ===
         if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {path}")
+            logger.warning(f"⚠️  sensors.toml not found at {path}. Falling back to default_sensors.toml")
+            path = Path("config/default_sensors.toml")
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Neither sensors.toml nor default_sensors.toml found in config/ directory."
+                )
 
         with open(path, "rb") as f:
             data = tomllib.load(f)
@@ -52,7 +63,19 @@ class AdvectConfig:
         )
 
         global_tags = global_data.get("tags", {})
-        ingestor_config = global_data.get("ingestor_config", "data_config.toml")
+
+        # === Handle ingestor_config fallback ===
+        ingestor_config = global_data.get("ingestor_config", "config/data_config.toml")
+        ingestor_path = Path(ingestor_config)
+
+        if not ingestor_path.exists():
+            logger.warning(f"⚠️  Ingestor config not found at {ingestor_path}. Falling back to default_data_config.toml")
+            fallback_path = Path("config/default_data_config.toml")
+            if fallback_path.exists():
+                ingestor_config = str(fallback_path)
+            else:
+                logger.error(f"❌ Neither {ingestor_path} nor default_data_config.toml found!")
+                # We'll still proceed but DAQIngestor will likely fail later
 
         sensor_data = data.get("sensors", [])
         sensors: List[SensorConfig] = []
@@ -72,13 +95,16 @@ class AdvectConfig:
                 interval=float(s.get("interval", 1.0)),
                 measurement=s.get("measurement", ""),
                 tags=s.get("tags", {}),
-                enabled=s.get("enabled", True),          # ← New
+                enabled=s.get("enabled", True),
             )
 
             known_keys = {"type", "name", "interval", "measurement", "tags", "enabled"}
             sensor_config.extra = {k: v for k, v in s.items() if k not in known_keys}
 
             sensors.append(sensor_config)
+
+        if not sensors:
+            logger.warning("No sensors defined in configuration.")
 
         return cls(
             writer=writer_config,

@@ -20,7 +20,7 @@ class INA228Sensor(BaseSensor):
         # INA228-specific configuration from .extra
         self.i2c_address: int = int(config.extra.get("i2c_address", 0x40))
         self.shunt_resistance: float = float(config.extra.get("shunt_resistance", 0.015))  # ohms
-
+        self.tags['address'] = self.i2c_address 
         self.ina = None
 
     async def initialize(self) -> None:

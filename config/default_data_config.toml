@@ -1,0 +1,12 @@
+[inbound]
+watch_dir = ".test-data"
+
+[device]
+add_public_ip = true
+
+[[sinks]]
+name = "local_json_archive"
+type = "file"
+config.output_path = "data/archive/json-data"
+config.format = "jsonl" 
+config.rotation = 'daily'
