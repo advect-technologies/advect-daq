@@ -8,6 +8,7 @@ dependencies = [
     "adafruit-blinka>=9.1.0",
     "adafruit-circuitpython-ina228>=2.0.5",
     "aiofiles>=25.1.0",
+    "aiohttp>=3.13.5",
     "daq-tools",
     "daqhats>=1.4.1.0",
     "loguru>=0.7.3",

@@ -18,6 +18,7 @@ from advect_daq.core.config import AdvectConfig
 from advect_daq.core.engine import AdvectEngine
 from advect_daq.core.logging import setup_logging, log
 from advect_daq.utils.discovery import discover_plugins, list_available_sensors
+from advect_daq.core.status_server import StatusServer
 
 from daq_tools import DAQIngestor
 
@@ -42,11 +43,17 @@ async def main(config_path: str = "config/sensors.toml"):
 
     engine = AdvectEngine(config)
     ingestor = None
+    status_server = None
 
     try:
         # Start sensor engine
         await engine.initialize()
         await engine.start()
+
+        # Start Status Server
+        if config.status_server.enabled:
+            status_server = StatusServer(engine, port=config.status_server.port)
+            await status_server.start()
 
         # Start DAQIngestor
         log.info(f"Starting DAQIngestor watching: {config.writer.output_dir}")
@@ -69,7 +76,10 @@ async def main(config_path: str = "config/sensors.toml"):
         log.info("=== Starting graceful shutdown ===")
         
         await engine.stop()
-        
+
+        if status_server:
+            await status_server.stop()
+
         if ingestor is not None:
             log.info("Waiting for DAQIngestor to process final batch...")
             await asyncio.sleep(3.0)

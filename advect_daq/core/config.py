@@ -22,6 +22,11 @@ class LoggingConfig:
     retention_days: int = 7
 
 @dataclass
+class StatusServerConfig:
+    enabled: bool = False
+    port: int = 8081
+
+@dataclass
 class SensorConfig:
     type: str
     name: str = ""
@@ -40,9 +45,10 @@ class SensorConfig:
 class AdvectConfig:
     writer: WriterConfig
     sensors: List[SensorConfig]
-    logging: LoggingConfig
     global_tags: Dict[str, str] = field(default_factory=dict)
     ingestor_config: str = "config/data_config.toml"
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+    status_server: StatusServerConfig = field(default_factory=StatusServerConfig)
 
     @classmethod
     def from_toml(cls, path: str | Path = "config/sensors.toml") -> "AdvectConfig":
@@ -93,6 +99,13 @@ class AdvectConfig:
             retention_days=logging_data.get("retention_days", 7),
         )
 
+        # Status Server config
+        status_data = global_data.get("status_server", {})
+        status_server_config = StatusServerConfig(
+            enabled=status_data.get("enabled", True),
+            port=int(status_data.get("port", 8081)),
+        )
+
         sensor_data = data.get("sensors", [])
         sensors: List[SensorConfig] = []
         name_counter: Dict[str, int] = {}
@@ -125,6 +138,7 @@ class AdvectConfig:
         return cls(
             writer=writer_config,
             sensors=sensors,
+            status_server=status_server_config,
             logging=logging_config,
             global_tags=global_tags,
             ingestor_config=ingestor_config

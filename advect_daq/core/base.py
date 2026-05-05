@@ -34,6 +34,12 @@ class BaseSensor(ABC):
             "sensor": config.name                               # ← Auto-added
         }
 
+        # New: Error tracking
+        self.last_error: str | None = None
+        self.error_count: int = 0
+        self.consecutive_errors: int = 0
+        self.healthy: bool = True
+
         if not self.name:
             raise ValueError(f"Sensor of type '{self.SENSOR_TYPE}' is missing a name")
 
@@ -53,3 +59,16 @@ class BaseSensor(ABC):
     async def shutdown(self) -> None:
         """Optional cleanup when shutting down the engine."""
         pass
+
+    def record_success(self):
+        """Call this after a successful read."""
+        self.last_error = None
+        self.consecutive_errors = 0
+        self.healthy = True
+
+    def record_error(self, error_msg: str):
+        """Call this when a read fails."""
+        self.last_error = error_msg
+        self.error_count += 1
+        self.consecutive_errors += 1
+        self.healthy = False    
