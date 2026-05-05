@@ -2,6 +2,12 @@
 tags = { location = "AdvectTechnologies", environment = "test" }
 # ingestor_config = "config/data_config.toml"
 
+[global.logging]
+level = "SUCCESS"          # DEBUG, INFO, WARNING, ERROR
+to_file = true
+log_dir = "logs"
+retention_days = 7
+
 [global.writer]
 output_dir = ".test-data"
 batch_size = 100

@@ -6,6 +6,7 @@ import aiofiles
 
 from daq_tools.models import DataPoint
 from .config import WriterConfig
+from ..core.logging import log
 
 
 class AsyncJsonlWriter:
@@ -52,7 +53,7 @@ class AsyncJsonlWriter:
                 await self._flush()
                 raise
             except Exception as e:
-                print(f"[Writer] Unexpected error: {e}")
+                log.warning(f"[Writer] Unexpected error: {e}")
 
     async def _flush(self):
         if not self._buffer:
@@ -68,11 +69,11 @@ class AsyncJsonlWriter:
             async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
                 await f.write("\n".join(lines) + "\n")
 
-            print(f"[Writer] Flushed {len(self._buffer)} DataPoints → {filename}")
+            log.debug(f"[Writer] Flushed {len(self._buffer)} DataPoints → {filename}")
             self._buffer.clear()
 
         except Exception as e:
-            print(f"[Writer] Failed to write {file_path}: {e}")
+            log.warning(f"[Writer] Failed to write {file_path}: {e}")
 
         finally:
             self._next_flush_time = asyncio.get_running_loop().time() + self.config.flush_interval

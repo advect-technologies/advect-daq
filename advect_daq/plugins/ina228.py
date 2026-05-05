@@ -7,7 +7,7 @@ from daq_tools.models import DataPoint
 
 from ..core.base import BaseSensor
 from ..core.config import SensorConfig
-
+from ..core.logging import log
 
 class INA228Sensor(BaseSensor):
     """Adafruit INA228 High-Side/Low-Side Power Monitor plugin."""
@@ -31,8 +31,8 @@ class INA228Sensor(BaseSensor):
 
             # Optional: Configure shunt resistance (important for accurate current/power)
             # The library handles calibration internally when you set it this way in newer versions
-            print(f"INA228 [{hex(self.i2c_address)}] initialized - Shunt: {self.shunt_resistance} Ω")
-            print(f"INA228 sensor '{self.name}' ready")
+            log.success(f"INA228 [{hex(self.i2c_address)}] initialized - Shunt: {self.shunt_resistance} Ω")
+            log.success(f"INA228 sensor '{self.name}' ready")
 
         except Exception as e:
             raise RuntimeError(f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}") from e
@@ -73,7 +73,7 @@ class INA228Sensor(BaseSensor):
             datapoints.append(dp)
 
         except Exception as e:
-            print(f"[INA228:{self.name}] Read error: {e}")
+            log.warning(f"[INA228:{self.name}] Read error: {e}")
             dp = DataPoint(
                 time=sample_time,
                 measurement=self.measurement,

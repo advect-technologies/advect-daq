@@ -1,81 +1,84 @@
 #!/usr/bin/env python3
 """
-Advect-DAQ Full Runner
-Runs both AdvectEngine (sensors) and DAQIngestor concurrently with proper shutdown ordering.
+Advect-DAQ Full Runner with improved logging
 """
 
 import asyncio
-import logging
 import signal
 import sys
 from pathlib import Path
+
+# Windows asyncio fix — must be very early
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from advect_daq.core.config import AdvectConfig
 from advect_daq.core.engine import AdvectEngine
+from advect_daq.core.logging import setup_logging, log
 from advect_daq.utils.discovery import discover_plugins, list_available_sensors
 
 from daq_tools import DAQIngestor
 
 
 async def main(config_path: str = "config/sensors.toml"):
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+    # Load config first
+    config = AdvectConfig.from_toml(config_path)
+    
+    # === Setup Logging ===
+    setup_logging(
+        log_level=config.logging.level,
+        log_to_file=config.logging.to_file,
+        log_dir=config.logging.log_dir,
+        retention_days=config.logging.retention_days,
     )
 
-    logger = logging.getLogger("advect_daq")
-    logger.info("=== Advect-DAQ Full System Starting ===")
+    log.info("=== Advect-DAQ Full System Starting ===")
 
     # Discover plugins
     discover_plugins()
-    logger.info(f"Available sensor types: {', '.join(list_available_sensors())}")
+    log.info(f"Available sensor types: {', '.join(list_available_sensors())}")
 
-    config = AdvectConfig.from_toml(config_path)
     engine = AdvectEngine(config)
-
     ingestor = None
 
     try:
+        # Start sensor engine
         await engine.initialize()
         await engine.start()
 
-        watch_dir = config.writer.output_dir
-        logger.info(f"Starting DAQIngestor watching: {watch_dir}")
-        logger.info(f"Using ingestor config: {config.ingestor_config}")
+        # Start DAQIngestor
+        log.info(f"Starting DAQIngestor watching: {config.writer.output_dir}")
+        log.info(f"Using ingestor config: {config.ingestor_config}")
 
         async with DAQIngestor.from_config_file(config.ingestor_config) as ingestor:
-            logger.info("✅ Advect-DAQ is now fully running (Sensors + Ingestor)")
+            log.success("✅ Advect-DAQ is now fully running (Sensors + Ingestor)")
 
             # Main keep-alive loop
             while True:
                 await asyncio.sleep(30)
 
     except asyncio.CancelledError:
-        logger.info("Shutdown requested (Cancelled)")
+        log.info("Shutdown requested (CancelledError)")
     except KeyboardInterrupt:
-        logger.info("Shutdown requested (KeyboardInterrupt)")
+        log.info("Shutdown requested (KeyboardInterrupt)")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        log.exception("Unexpected error in main loop")
     finally:
-        logger.info("=== Starting graceful shutdown ===")
-
-        # Step 1: Stop sensor acquisition
+        log.info("=== Starting graceful shutdown ===")
+        
         await engine.stop()
-
-        # Step 2: Give DAQIngestor time to process the final files
+        
         if ingestor is not None:
-            logger.info("Waiting for DAQIngestor to process final batch...")
-            await asyncio.sleep(3.0)   # Give ingestor time to pick up last files
+            log.info("Waiting for DAQIngestor to process final batch...")
+            await asyncio.sleep(3.0)
 
-        logger.info("Advect-DAQ shutdown complete.")
+        log.success("Advect-DAQ shutdown complete.")
 
 
 def setup_signal_handlers():
     def shutdown_handler(signum, frame):
-        # This will be caught by the main try/except
         raise KeyboardInterrupt(f"Received signal {signum}")
 
     signal.signal(signal.SIGINT, shutdown_handler)
@@ -84,11 +87,12 @@ def setup_signal_handlers():
 
 if __name__ == "__main__":
     setup_signal_handlers()
-
+    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nAdvect-DAQ stopped gracefully.")
+        print("\nAdvect-DAQ stopped.")        
     except Exception as e:
         print(f"Fatal error: {e}")
-        sys.exit(1)
+    finally:
+        sys.exit(0)

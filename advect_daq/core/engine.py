@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime
 from typing import Dict
 
@@ -8,7 +7,7 @@ from .config import AdvectConfig
 from .writer import AsyncJsonlWriter
 from ..utils.discovery import get_sensor_class
 
-logger = logging.getLogger(__name__)
+from .logging import log
 
 
 class AdvectEngine:
@@ -28,7 +27,7 @@ class AdvectEngine:
 
         for sensor_cfg in self.config.sensors:
             if not sensor_cfg.enabled:
-                logger.info(f"Skipping disabled sensor: {sensor_cfg.name}")
+                log.info(f"Skipping disabled sensor: {sensor_cfg.name}")
                 continue
 
             try:
@@ -39,13 +38,13 @@ class AdvectEngine:
                 self.sensors[sensor.name] = sensor
                 self.last_success[sensor.name] = asyncio.get_running_loop().time()
                 
-                logger.info(f"Initialized sensor: {sensor.name} (type: {sensor_cfg.type})")
+                log.info(f"Initialized sensor: {sensor.name} (type: {sensor_cfg.type})")
                 
             except Exception as e:
-                logger.error(f"Failed to initialize sensor '{sensor_cfg.name}': {e}", exc_info=True)
+                log.error(f"Failed to initialize sensor '{sensor_cfg.name}': {e}", exc_info=True)
 
         if not self.sensors:
-            logger.warning("No sensors were successfully initialized")
+            log.warning("No sensors were successfully initialized")
 
     async def _sensor_runner(self, sensor: BaseSensor):
         """Run periodic reads for a single sensor with backoff."""
@@ -66,11 +65,11 @@ class AdvectEngine:
                 await asyncio.sleep(sensor.interval)
 
             except asyncio.CancelledError:
-                logger.info(f"Shutting down sensor: {sensor.name}")
+                log.info(f"Shutting down sensor: {sensor.name}")
                 await sensor.shutdown()
                 raise
             except Exception as e:
-                logger.error(f"Error in sensor {sensor.name}: {e}", exc_info=True)
+                log.error(f"Error in sensor {sensor.name}: {e}", exc_info=True)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
 
@@ -83,7 +82,7 @@ class AdvectEngine:
     def _print_status_summary(self):
         """Print a clean status summary."""
         now = asyncio.get_running_loop().time()
-        logger.info("=== Advect-DAQ Status Summary ===")
+        log.info("=== Advect-DAQ Status Summary ===")
         
         for name, sensor in self.sensors.items():
             last = self.last_success.get(name, 0)
@@ -96,11 +95,11 @@ class AdvectEngine:
             else:
                 status = "ERROR"
                 
-            logger.info(f"  {name:20} | Status: {status:6} | Last read: {age:6.1f}s ago | Interval: {sensor.interval:.1f}s")
+            log.info(f"  {name:20} | Status: {status:6} | Last read: {age:6.1f}s ago | Interval: {sensor.interval:.1f}s")
 
         qsize = self.writer.queue.qsize() if hasattr(self.writer, 'queue') else 0
-        logger.info(f"  Active sensors: {len(self.sensors)} | Writer queue: {qsize}")
-        logger.info("===================================")
+        log.info(f"  Active sensors: {len(self.sensors)} | Writer queue: {qsize}")
+        log.info("===================================")
 
     async def start(self) -> None:
         """Start all sensor runner tasks and status summary."""
@@ -111,11 +110,11 @@ class AdvectEngine:
         # Start periodic status summary
         self.status_task = asyncio.create_task(self._status_summary_task())
 
-        logger.info(f"AdvectEngine started with {len(self.sensors)} active sensor(s)")
+        log.info(f"AdvectEngine started with {len(self.sensors)} active sensor(s)")
 
     async def stop(self) -> None:
         """Graceful shutdown."""
-        logger.info("Shutting down AdvectEngine...")
+        log.info("Shutting down AdvectEngine...")
 
         # Cancel status task
         if self.status_task and not self.status_task.done():
@@ -134,7 +133,7 @@ class AdvectEngine:
             await asyncio.gather(*self.tasks.values(), return_exceptions=True)
 
         await self.writer.stop()
-        logger.info("AdvectEngine shutdown complete")
+        log.info("AdvectEngine shutdown complete")
 
 
 # ====================== Helper Entry Point ======================
@@ -152,10 +151,10 @@ async def run_advect_daq(config_path: str = "config/sensors.toml"):
             await asyncio.sleep(3600)
             
     except asyncio.CancelledError:
-        logger.info("Shutdown requested")
+        log.info("Shutdown requested")
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received")
+        log.info("Keyboard interrupt received")
     except Exception as e:
-        logger.error(f"Unexpected error in engine: {e}", exc_info=True)
+        log.error(f"Unexpected error in engine: {e}", exc_info=True)
     finally:
         await engine.stop()

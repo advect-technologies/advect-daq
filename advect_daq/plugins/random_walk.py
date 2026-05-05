@@ -6,6 +6,7 @@ from daq_tools.models import DataPoint
 
 from ..core.base import BaseSensor
 from ..core.config import SensorConfig
+from ..core.logging import log
 
 
 class RandomSensor(BaseSensor):
@@ -18,6 +19,7 @@ class RandomSensor(BaseSensor):
         super().__init__(config, global_tags)
         self.max_values = self.config.extra.get('max_values',4)
         self.values = list(range(self.max_values))
+        log.success('Initialized Random Walk Sensor')
 
     async def read(self) -> List[DataPoint]:
         sample_time = dt.datetime.now(dt.timezone.utc).timestamp()
@@ -41,6 +43,6 @@ class RandomSensor(BaseSensor):
         # Occasionally simulate an error
         if random.random() < 0.05:   # 5% chance
             dp.fields = {"error_code": 99}
-            print(f"[RandomSensor:{self.name}] Simulated error")
+            log.warning(f"[RandomSensor:{self.name}] Simulated error")
 
         return [dp]

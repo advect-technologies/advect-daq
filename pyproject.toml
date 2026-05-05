@@ -10,6 +10,7 @@ dependencies = [
     "aiofiles>=25.1.0",
     "daq-tools",
     "daqhats>=1.4.1.0",
+    "loguru>=0.7.3",
     "rpi-gpio>=0.7.1 ; sys_platform == 'linux'",
 ]
 

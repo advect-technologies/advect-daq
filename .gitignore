@@ -226,3 +226,5 @@ data/*
 sensors.toml.deploy
 _sensors.toml
 _data_config.toml
+
+logs/*

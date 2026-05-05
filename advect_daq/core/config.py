@@ -14,6 +14,12 @@ class WriterConfig:
     batch_size: int = 100
     flush_interval: float = 10.0
 
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    to_file: bool = False
+    log_dir: str = "logs"
+    retention_days: int = 7
 
 @dataclass
 class SensorConfig:
@@ -34,6 +40,7 @@ class SensorConfig:
 class AdvectConfig:
     writer: WriterConfig
     sensors: List[SensorConfig]
+    logging: LoggingConfig
     global_tags: Dict[str, str] = field(default_factory=dict)
     ingestor_config: str = "config/data_config.toml"
 
@@ -77,6 +84,15 @@ class AdvectConfig:
                 logger.error(f"❌ Neither {ingestor_path} nor default_data_config.toml found!")
                 # We'll still proceed but DAQIngestor will likely fail later
 
+        # === Logging config ===
+        logging_data = global_data.get("logging", {})
+        logging_config = LoggingConfig(
+            level=logging_data.get("level", "INFO"),
+            to_file=logging_data.get("to_file", False),
+            log_dir=logging_data.get("log_dir", "logs"),
+            retention_days=logging_data.get("retention_days", 7),
+        )
+
         sensor_data = data.get("sensors", [])
         sensors: List[SensorConfig] = []
         name_counter: Dict[str, int] = {}
@@ -109,6 +125,7 @@ class AdvectConfig:
         return cls(
             writer=writer_config,
             sensors=sensors,
+            logging=logging_config,
             global_tags=global_tags,
             ingestor_config=ingestor_config
         )

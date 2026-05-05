@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Type
 
 from ..core.base import BaseSensor
+from ..core.logging import log
 
 # Registry of sensor types -> Sensor classes
 _SENSOR_REGISTRY: Dict[str, Type[BaseSensor]] = {}
@@ -35,7 +36,7 @@ def discover_plugins() -> None:
                     if hasattr(obj, "SENSOR_TYPE") and obj.SENSOR_TYPE != "base":
                         _SENSOR_REGISTRY[obj.SENSOR_TYPE] = obj
         except Exception as e:
-            print(f"Warning: Failed to load plugin module '{module_name}': {e}")
+            log.warning(f"Warning: Failed to load plugin module '{module_name}': {e}")
 
 
 def get_sensor_class(sensor_type: str) -> Type[BaseSensor]:

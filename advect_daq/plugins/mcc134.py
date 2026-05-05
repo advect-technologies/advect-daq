@@ -6,7 +6,7 @@ from daq_tools.models import DataPoint
 
 from ..core.base import BaseSensor
 from ..core.config import SensorConfig
-
+from ..core.logging import log
 
 class MCC134Sensor(BaseSensor):
     """MCC 134 Thermocouple HAT sensor plugin."""
@@ -37,7 +37,7 @@ class MCC134Sensor(BaseSensor):
         for ch, tc_str in zip(self.channels, self.tc_types):
             tc_type = getattr(TcTypes, f"TYPE_{tc_str.upper()}", TcTypes.TYPE_K)
             self.board.tc_type_write(ch, tc_type)
-            print(f"MCC134 [{self.address}] ch{ch} → Type {tc_str} (sensor: {self.name})")
+            log.success(f"MCC134 [{self.address}] ch{ch} → Type {tc_str} (sensor: {self.name})")
 
     async def read(self) -> List[DataPoint]:
         if not self.board:
@@ -74,6 +74,6 @@ class MCC134Sensor(BaseSensor):
                     fields={"temperature": None, "error_code": 99}
                 )
                 datapoints.append(dp)
-                print(f"[MCC134:{self.name}] Error reading channel {ch}: {e}")
+                log.warning(f"[MCC134:{self.name}] Error reading channel {ch}: {e}")
 
         return datapoints
