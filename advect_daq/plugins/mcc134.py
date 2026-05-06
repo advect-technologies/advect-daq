@@ -10,11 +10,11 @@ from ..core.config import SensorConfig
 from ..core.logging import log
 
 class ErrorCodes(IntEnum):
-    NONE: 0
-    OPEN_TC: 1
-    OVERRANGE: 2
-    COMMON_MODE: 3
-    UNKNOWN: 99
+    NONE = 0
+    OPEN_TC = 1
+    OVERRANGE = 2
+    COMMON_MODE = 3
+    UNKNOWN = 99
 
 
 class MCC134Sensor(BaseSensor):
