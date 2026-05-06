@@ -3,7 +3,7 @@ tags = { location = "AdvectTechnologies", environment = "test" }
 # ingestor_config = "config/data_config.toml"
 
 [global.status_server]
-enabled = false
+enabled = true
 port = 8081
 
 [global.logging]

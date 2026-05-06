@@ -5,7 +5,7 @@ import board
 import adafruit_ina228
 from daq_tools.models import DataPoint
 
-from ..core.base import BaseSensor
+from ..core.base import BaseSensor, SensorResult, SensorErrorType
 from ..core.config import SensorConfig
 from ..core.logging import log
 
@@ -26,18 +26,15 @@ class INA228Sensor(BaseSensor):
     async def initialize(self) -> None:
         """Initialize the INA228 over I2C."""
         try:
-            i2c = board.I2C()  # Uses Blinka on Raspberry Pi
+            i2c = board.I2C()  
             self.ina = adafruit_ina228.INA228(i2c, address=self.i2c_address)
-
-            # Optional: Configure shunt resistance (important for accurate current/power)
-            # The library handles calibration internally when you set it this way in newer versions
             log.success(f"INA228 [{hex(self.i2c_address)}] initialized - Shunt: {self.shunt_resistance} Ω")
-            log.success(f"INA228 sensor '{self.name}' ready")
 
         except Exception as e:
+            log.error(f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}")
             raise RuntimeError(f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}") from e
 
-    async def read(self) -> List[DataPoint]:
+    async def read(self) -> SensorResult:
         if not self.ina:
             raise RuntimeError("INA228 not initialized")
 
@@ -71,6 +68,7 @@ class INA228Sensor(BaseSensor):
                 fields=fields
             )
             datapoints.append(dp)
+            return SensorResult(datapoints=datapoints)
 
         except Exception as e:
             log.warning(f"[INA228:{self.name}] Read error: {e}")
@@ -86,8 +84,13 @@ class INA228Sensor(BaseSensor):
                 }
             )
             datapoints.append(dp)
-
-        return datapoints
+        
+            return SensorResult(
+                datapoints=datapoints,
+                success=False,
+                error_type=SensorErrorType.COMMUNICATION,
+                error_message=str(e)
+            )
 
     async def shutdown(self) -> None:
         self.ina = None

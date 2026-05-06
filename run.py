@@ -97,12 +97,13 @@ def setup_signal_handlers():
 
 if __name__ == "__main__":
     setup_signal_handlers()
-    
+    exit_code = 0
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nAdvect-DAQ stopped.")        
     except Exception as e:
         print(f"Fatal error: {e}")
+        exit_code = 1
     finally:
-        sys.exit(0)
+        sys.exit(exit_code)

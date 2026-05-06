@@ -1,19 +1,27 @@
 import datetime as dt
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from .config import SensorConfig
 
 from daq_tools.models import DataPoint
+from enum import IntEnum
 
-
+class SensorErrorType(IntEnum):
+    NONE = 0
+    AVAILABILITY = 3      # Sensor completely unreachable (e.g. board not found)
+    COMMUNICATION = 2     # Can talk to sensor but read failed
+    DATA_QUALITY = 1      # Got data but it's bad (open TC, overrange, etc.)
+    UNKNOWN = 4
+    
 @dataclass
 class SensorResult:
-    """Container returned by sensor.read()"""
+    """Standardized return value from sensor.read()"""
     datapoints: List[DataPoint]
-    status: str = "ok"           # "ok", "error", "open_tc", etc.
-    error: str | None = None
-
+    success: bool = True
+    error_type: SensorErrorType = SensorErrorType.NONE
+    error_message: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class BaseSensor(ABC):
     """Abstract base class for all Advect-DAQ sensors."""
@@ -34,11 +42,11 @@ class BaseSensor(ABC):
             "sensor": config.name                               # ← Auto-added
         }
 
-        # New: Error tracking
-        self.last_error: str | None = None
-        self.error_count: int = 0
+        # Health tracking
+        self.last_error: Optional[str] = None
         self.consecutive_errors: int = 0
         self.healthy: bool = True
+        self.last_error_type: SensorErrorType = SensorErrorType.NONE
 
         if not self.name:
             raise ValueError(f"Sensor of type '{self.SENSOR_TYPE}' is missing a name")
@@ -48,11 +56,11 @@ class BaseSensor(ABC):
         pass
 
     @abstractmethod
-    async def read(self) -> List[DataPoint]:
+    async def read(self) -> SensorResult:
         """
-        Return a list of DataPoints from this sensor.
+        Return a SensorResult from this sensor.
         Multi-channel sensors (e.g. MCC134) should return one DataPoint per channel.
-        Errors can be encoded as fields (e.g. error_code, status).
+        Errors that should propagate to db must be encoded as fields (e.g. error_code, status).
         """
         ...
 
@@ -61,14 +69,13 @@ class BaseSensor(ABC):
         pass
 
     def record_success(self):
-        """Call this after a successful read."""
         self.last_error = None
         self.consecutive_errors = 0
         self.healthy = True
+        self.last_error_type = SensorErrorType.NONE
 
-    def record_error(self, error_msg: str):
-        """Call this when a read fails."""
-        self.last_error = error_msg
-        self.error_count += 1
+    def record_error(self, error_type: SensorErrorType, message: str):
+        self.last_error = message
         self.consecutive_errors += 1
-        self.healthy = False    
+        self.healthy = False
+        self.last_error_type = error_type

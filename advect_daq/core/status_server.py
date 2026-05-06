@@ -3,17 +3,17 @@ import datetime as dt
 from aiohttp import web
 
 from .engine import AdvectEngine
+from .base import SensorErrorType
 from .logging import log
 
 
 class StatusServer:
-    def __init__(self, engine: AdvectEngine, port: int = 8081):
+    def __init__(self, engine: AdvectEngine, port: int = 8080):
         self.engine = engine
         self.port = port
         self.runner = None
 
     async def health(self, request):
-        """Simple health check"""
         return web.json_response({
             "status": "healthy",
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -21,7 +21,6 @@ class StatusServer:
         })
 
     async def status(self, request):
-        """Detailed JSON status"""
         now = asyncio.get_running_loop().time()
         sensors_status = []
 
@@ -36,7 +35,10 @@ class StatusServer:
                 "type": sensor_type,
                 "interval": sensor.interval,
                 "last_read_seconds_ago": round(age, 1) if age is not None else None,
-                "status": "ok" if age is not None and age < sensor.interval * 5 else "stale"
+                "healthy": sensor.healthy,
+                "error_type": sensor.last_error_type.value,
+                "error_message": sensor.last_error,
+                "consecutive_errors": sensor.consecutive_errors
             })
 
         return web.json_response({
@@ -44,66 +46,139 @@ class StatusServer:
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "active_sensors": len(self.engine.sensors),
             "sensors": sensors_status,
-            "writer_queue_size": self.engine.writer.queue.qsize() if hasattr(self.engine.writer, 'queue') else 0,
+            "writer_queue_size": getattr(self.engine.writer, 'queue', None).qsize() 
+                               if hasattr(self.engine.writer, 'queue') else 0,
         })
 
     async def html_status(self, request):
-        """Simple nice HTML dashboard"""
+        """Dark mode dashboard"""
         now = asyncio.get_running_loop().time()
+        
         html = f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
-            <title>Advect-DAQ Status</title>
-            <meta http-equiv="refresh" content="10">
+            <meta charset="UTF-8">
+            <title>Advect-DAQ • Status</title>
+            <meta http-equiv="refresh" content="12">
             <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }}
-                h1 {{ color: #2c3e50; }}
-                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-                th, td {{ padding: 10px; border: 1px solid #ddd; text-align: left; }}
-                th {{ background-color: #34495e; color: white; }}
-                .ok {{ color: green; font-weight: bold; }}
-                .stale {{ color: orange; font-weight: bold; }}
-                .refresh {{ color: #666; font-size: 0.9em; }}
+                :root {{
+                    --bg: #0f1117;
+                    --card: #1a1f2e;
+                    --text: #e0e0e0;
+                    --text-muted: #a0a0a0;
+                    --border: #2a3347;
+                }}
+                body {{ 
+                    font-family: 'Segoe UI', Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 20px; 
+                    background: var(--bg); 
+                    color: var(--text); 
+                }}
+                h1 {{ color: #4fc3f7; }}
+                .header {{ margin-bottom: 20px; }}
+                table {{ 
+                    border-collapse: collapse; 
+                    width: 100%; 
+                    background: var(--card); 
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                }}
+                th, td {{ 
+                    padding: 14px; 
+                    text-align: left; 
+                    border-bottom: 1px solid var(--border);
+                }}
+                th {{ 
+                    background: #1f2937; 
+                    color: #90caf9;
+                }}
+                tr:hover {{ background: #252d3f; }}
+                .ok {{ color: #66ff99; font-weight: bold; }}
+                .warning {{ color: #ffcc33; font-weight: bold; }}
+                .error {{ color: #ff6666; font-weight: bold; }}
+                .error-msg {{ 
+                    background: #2a1f1f; 
+                    padding: 12px; 
+                    border-left: 5px solid #ff6666; 
+                    font-family: monospace;
+                    white-space: pre-wrap;
+                }}
+                .expandable {{ cursor: pointer; }}
+                .refresh {{ color: var(--text-muted); font-size: 0.9em; }}
             </style>
         </head>
         <body>
-            <h1>Advect-DAQ Status</h1>
-            <p class="refresh">Last updated: {dt.datetime.now(dt.timezone.utc).isoformat()}</p>
+            <div class="header">
+                <h1>Advect-DAQ Status</h1>
+                <p class="refresh">Last updated: {dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')} UTC</p>
+                <p><strong>Active Sensors:</strong> {len(self.engine.sensors)}</p>
+            </div>
             
-            <h2>System Overview</h2>
-            <p><strong>Active Sensors:</strong> {len(self.engine.sensors)}</p>
-            
-            <h2>Sensors</h2>
             <table>
                 <tr>
-                    <th>Name</th>
+                    <th>Sensor</th>
                     <th>Type</th>
-                    <th>Interval (s)</th>
+                    <th>Interval</th>
                     <th>Last Read</th>
                     <th>Status</th>
+                    <th>Info</th>
                 </tr>
         """
 
         for name, sensor in self.engine.sensors.items():
             last = self.engine.last_success.get(name, 0)
             age = now - last if last > 0 else None
-            status = "ok" if age is not None and age < sensor.interval * 5 else "stale"
-            sensor_type = getattr(getattr(sensor, 'config', None), 'type', 'unknown')
-            
+            error_type = sensor.last_error_type
+
+            if sensor.healthy and age is not None and age < sensor.interval * 4:
+                status_class = "ok"
+                status_text = "OK"
+            elif error_type == SensorErrorType.DATA_QUALITY:
+                status_class = "warning"
+                status_text = "WARNING"
+            else:
+                status_class = "error"
+                status_text = "ERROR"
+
+            age_str = f"{round(age, 1)}s ago" if age is not None else "Never"
+
             html += f"""
-                <tr>
+                <tr class="expandable" onclick="toggleError('{name}')">
                     <td><strong>{name}</strong></td>
-                    <td>{sensor_type}</td>
-                    <td>{sensor.interval}</td>
-                    <td>{round(age, 1) if age is not None else 'Never'}s ago</td>
-                    <td class="{status}">{status.upper()}</td>
+                    <td>{getattr(getattr(sensor, 'config', None), 'type', 'unknown')}</td>
+                    <td>{sensor.interval}s</td>
+                    <td>{age_str}</td>
+                    <td class="{status_class}">{status_text}</td>
+                    <td>▼</td>
+                </tr>
+                <tr id="error-{name}" style="display: none;">
+                    <td colspan="6">
+                        <div class="error-msg">
+                            <strong>Error Type:</strong> {error_type.value}<br>
+                            <strong>Consecutive Errors:</strong> {sensor.consecutive_errors}<br>
+                            <strong>Message:</strong> {sensor.last_error or 'No error'}
+                        </div>
+                    </td>
                 </tr>
             """
 
         html += """
             </table>
-            <p><a href="/status">View JSON Status</a> | <a href="/health">Health Check</a></p>
+
+            <p style="margin-top: 30px;">
+                <a href="/status" style="color: #90caf9;">View JSON Status</a> | 
+                <a href="/health" style="color: #90caf9;">Health Check</a>
+            </p>
+
+            <script>
+                function toggleError(name) {
+                    const row = document.getElementById('error-' + name);
+                    row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+                }
+            </script>
         </body>
         </html>
         """
@@ -113,7 +188,7 @@ class StatusServer:
         app = web.Application()
         app.router.add_get('/health', self.health)
         app.router.add_get('/status', self.status)
-        app.router.add_get('/', self.html_status) 
+        app.router.add_get('/', self.html_status)
 
         runner = web.AppRunner(app)
         await runner.setup()
@@ -121,10 +196,8 @@ class StatusServer:
         await site.start()
 
         self.runner = runner
-        log.success(f"Status server running on http://0.0.0.0:{self.port}")
+        log.success(f"🌐 Status server running on http://0.0.0.0:{self.port}")
         log.info(f"→ Dashboard: http://localhost:{self.port}/")
-        log.info(f"→ JSON Status: http://localhost:{self.port}/status")
-        log.info(f"→ Health: http://localhost:{self.port}/health")
 
     async def stop(self):
         if self.runner:
