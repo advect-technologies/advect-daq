@@ -60,6 +60,10 @@ class AdvectEngine:
                     sensor.record_success()
                     self.last_success[sensor.name] = asyncio.get_running_loop().time()
                     backoff = 1.0
+                elif result.error_type <= SensorErrorType.DATA_QUALITY:
+                    sensor.record_error(result.error_type, result.error_message or "Unknown error")
+                    self.last_success[sensor.name] = asyncio.get_running_loop().time()
+                    backoff = 1.0            
                 else:
                     sensor.record_error(result.error_type, result.error_message or "Unknown error")
 
