@@ -1,5 +1,6 @@
 import datetime as dt
 from typing import Dict, Optional, List
+from enum import IntEnum
 
 from daqhats import mcc134, HatIDs, TcTypes, hat_list, HatError
 from daq_tools.models import DataPoint
@@ -7,6 +8,14 @@ from daq_tools.models import DataPoint
 from ..core.base import BaseSensor, SensorResult, SensorErrorType
 from ..core.config import SensorConfig
 from ..core.logging import log
+
+class ErrorCodes(IntEnum):
+    NONE: 0
+    OPEN_TC: 1
+    OVERRANGE: 2
+    COMMON_MODE: 3
+    UNKNOWN: 99
+
 
 class MCC134Sensor(BaseSensor):
     """MCC 134 Thermocouple HAT sensor plugin."""
@@ -65,19 +74,19 @@ class MCC134Sensor(BaseSensor):
                 temp = self.board.t_in_read(ch)
 
                 if temp == mcc134.OPEN_TC_VALUE:
-                    fields = {"temperature": None, "error_code": 1}
+                    fields = {"temperature": None, "error_code": ErrorCodes.OPEN_TC}
                     errors.append(f"Ch{ch}: Open TC")
                     error_levels.append(SensorErrorType.DATA_QUALITY)
                 elif temp == mcc134.OVERRANGE_TC_VALUE:
-                    fields = {"temperature": None, "error_code": 2}
+                    fields = {"temperature": None, "error_code": ErrorCodes.OVERRANGE}
                     errors.append(f"Ch{ch}: Overrange")
                     error_levels.append(SensorErrorType.DATA_QUALITY)
                 elif temp == mcc134.COMMON_MODE_TC_VALUE:
-                    fields = {"temperature": None, "error_code": 3}
+                    fields = {"temperature": None, "error_code": ErrorCodes.COMMON_MODE}
                     errors.append(f"Ch{ch}: Common mode")           
                     error_levels.append(SensorErrorType.DATA_QUALITY)         
                 else:
-                    fields = {"temperature": round(float(temp), 2), "error_code": 0}
+                    fields = {"temperature": round(float(temp), 2), "error_code": ErrorCodes.NONE}
 
                 dp = DataPoint(
                     time=sample_time,
@@ -96,7 +105,7 @@ class MCC134Sensor(BaseSensor):
                     time=sample_time,
                     measurement=self.measurement,
                     tags={**self.tags, "channel": str(ch), "sn": self.serial_number},
-                    fields={"temperature": None, "error_code": 99}
+                    fields={"temperature": None, "error_code": ErrorCodes.UNKNOWN}
                 )
                 datapoints.append(dp)
 
@@ -109,7 +118,7 @@ class MCC134Sensor(BaseSensor):
                     time=sample_time,
                     measurement=self.measurement,
                     tags={**self.tags, "channel": str(ch), "sn": self.serial_number},
-                    fields={"temperature": None, "error_code": 99}
+                    fields={"temperature": None, "error_code": ErrorCodes.UNKNOWN}
                 )
                 datapoints.append(dp)
 

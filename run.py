@@ -23,9 +23,9 @@ from advect_daq.core.status_server import StatusServer
 from daq_tools import DAQIngestor
 
 
-async def main(config_path: str = "config/sensors.toml"):
+async def main():
     # Load config first
-    config = AdvectConfig.from_toml(config_path)
+    config = AdvectConfig.from_toml()
     
     # === Setup Logging ===
     setup_logging(

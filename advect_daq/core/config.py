@@ -37,9 +37,7 @@ class SensorConfig:
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.measurement and self.name:
-            self.measurement = self.name
-
+        if not self.measurement: raise RuntimeError(f'Sensor {self.name} must have a non null measurement')
 
 @dataclass
 class AdvectConfig:
@@ -67,6 +65,7 @@ class AdvectConfig:
             data = tomllib.load(f)
 
         global_data = data.get("global", {})
+        global_tags = global_data.get("tags", {})
         writer_data = global_data.get("writer", {})
 
         writer_config = WriterConfig(
@@ -75,7 +74,6 @@ class AdvectConfig:
             flush_interval=writer_data.get("flush_interval", 10.0),
         )
 
-        global_tags = global_data.get("tags", {})
 
         # === Handle ingestor_config fallback ===
         ingestor_config = global_data.get("ingestor_config", "config/data_config.toml")
