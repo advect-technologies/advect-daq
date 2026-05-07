@@ -14,6 +14,17 @@ class WriterConfig:
     batch_size: int = 100
     flush_interval: float = 10.0
 
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    to_file: bool = False
+    log_dir: str = "logs"
+    retention_days: int = 7
+
+@dataclass
+class StatusServerConfig:
+    enabled: bool = False
+    port: int = 8081
 
 @dataclass
 class SensorConfig:
@@ -26,9 +37,7 @@ class SensorConfig:
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.measurement and self.name:
-            self.measurement = self.name
-
+        if not self.measurement: raise RuntimeError(f'Sensor {self.name} must have a non null measurement')
 
 @dataclass
 class AdvectConfig:
@@ -36,6 +45,8 @@ class AdvectConfig:
     sensors: List[SensorConfig]
     global_tags: Dict[str, str] = field(default_factory=dict)
     ingestor_config: str = "config/data_config.toml"
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+    status_server: StatusServerConfig = field(default_factory=StatusServerConfig)
 
     @classmethod
     def from_toml(cls, path: str | Path = "config/sensors.toml") -> "AdvectConfig":
@@ -54,6 +65,7 @@ class AdvectConfig:
             data = tomllib.load(f)
 
         global_data = data.get("global", {})
+        global_tags = global_data.get("tags", {})
         writer_data = global_data.get("writer", {})
 
         writer_config = WriterConfig(
@@ -62,7 +74,6 @@ class AdvectConfig:
             flush_interval=writer_data.get("flush_interval", 10.0),
         )
 
-        global_tags = global_data.get("tags", {})
 
         # === Handle ingestor_config fallback ===
         ingestor_config = global_data.get("ingestor_config", "config/data_config.toml")
@@ -76,6 +87,22 @@ class AdvectConfig:
             else:
                 logger.error(f"❌ Neither {ingestor_path} nor default_data_config.toml found!")
                 # We'll still proceed but DAQIngestor will likely fail later
+
+        # === Logging config ===
+        logging_data = global_data.get("logging", {})
+        logging_config = LoggingConfig(
+            level=logging_data.get("level", "INFO"),
+            to_file=logging_data.get("to_file", False),
+            log_dir=logging_data.get("log_dir", "logs"),
+            retention_days=logging_data.get("retention_days", 7),
+        )
+
+        # Status Server config
+        status_data = global_data.get("status_server", {})
+        status_server_config = StatusServerConfig(
+            enabled=status_data.get("enabled", True),
+            port=int(status_data.get("port", 8081)),
+        )
 
         sensor_data = data.get("sensors", [])
         sensors: List[SensorConfig] = []
@@ -109,6 +136,8 @@ class AdvectConfig:
         return cls(
             writer=writer_config,
             sensors=sensors,
+            status_server=status_server_config,
+            logging=logging_config,
             global_tags=global_tags,
             ingestor_config=ingestor_config
         )
