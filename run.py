@@ -52,7 +52,10 @@ async def main():
 
         # Start Status Server
         if config.status_server.enabled:
-            status_server = StatusServer(engine, port=config.status_server.port)
+            status_server = StatusServer(engine,
+                                         port=config.status_server.port,
+                                         expose_data=config.status_server.expose_data
+                                         )
             await status_server.start()
 
         # Start DAQIngestor

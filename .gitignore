@@ -228,3 +228,5 @@ _sensors.toml
 _data_config.toml
 
 logs/*
+
+output/*

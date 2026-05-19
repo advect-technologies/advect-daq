@@ -2,22 +2,55 @@ import asyncio
 import datetime as dt
 from aiohttp import web
 
+from typing import List
 from .engine import AdvectEngine
 from .base import SensorErrorType
 from .logging import log
+from daq_tools.models import DataPoint
+from dataclasses import asdict
 
+def _datapoint_to_dict(dp:DataPoint):
+    try:
+        return asdict(dp)
+    except:
+        {}
 
 class StatusServer:
-    def __init__(self, engine: AdvectEngine, port: int = 8080):
+    def __init__(self, engine: AdvectEngine, port: int = 8080, expose_data: bool = False):
         self.engine = engine
         self.port = port
         self.runner = None
+        self.expose_data = expose_data
 
     async def health(self, request):
         return web.json_response({
             "status": "healthy",
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "active_sensors": len(self.engine.sensors)
+        })
+
+    async def latest_data(self, request):
+        """Return latest raw sensor readings as JSON."""
+        sensor_name = request.query.get("sensor")   # ?sensor=some_sensor
+
+        if sensor_name:
+            if sensor_name not in self.engine.latest_data:
+                return web.json_response(
+                    {"error": f"Sensor '{sensor_name}' not found or has no data yet"},
+                    status=404
+                )
+            data = {sensor_name: [_datapoint_to_dict(d) for d in self.engine.latest_data.get(sensor_name)]}
+            
+        else:
+            data = {
+                sensor_name: [_datapoint_to_dict(d) for d in dps]
+                for sensor_name, dps in self.engine.latest_data.items()
+            }
+
+        return web.json_response({
+            "status": "ok",
+            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "data": data
         })
 
     async def status(self, request):
@@ -189,6 +222,9 @@ class StatusServer:
         app.router.add_get('/health', self.health)
         app.router.add_get('/status', self.status)
         app.router.add_get('/', self.html_status)
+        if self.expose_data:
+            app.router.add_get('/data', self.latest_data)
+            app.router.add_get('/data/{sensor}', self.latest_data)
 
         runner = web.AppRunner(app)
         await runner.setup()

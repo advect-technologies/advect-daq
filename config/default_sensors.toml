@@ -5,6 +5,7 @@ tags = { location = "AdvectTechnologies", environment = "test" }
 [global.status_server]
 enabled = true
 port = 8081
+expose_data = true
 
 [global.logging]
 level = "INFO"          # DEBUG, INFO, WARNING, ERROR

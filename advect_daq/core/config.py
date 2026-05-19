@@ -25,6 +25,7 @@ class LoggingConfig:
 class StatusServerConfig:
     enabled: bool = False
     port: int = 8081
+    expose_data: bool = False
 
 @dataclass
 class SensorConfig:
@@ -102,6 +103,7 @@ class AdvectConfig:
         status_server_config = StatusServerConfig(
             enabled=status_data.get("enabled", True),
             port=int(status_data.get("port", 8081)),
+            expose_data=status_data.get('expose_data',False)
         )
 
         sensor_data = data.get("sensors", [])

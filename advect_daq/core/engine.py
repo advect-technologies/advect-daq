@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict
+from typing import Dict, List
 
 from .base import BaseSensor, SensorResult, SensorErrorType
 from .config import AdvectConfig
@@ -7,7 +7,7 @@ from .writer import AsyncJsonlWriter
 from ..utils.discovery import get_sensor_class
 
 from .logging import log
-
+from daq_tools.models import DataPoint
 
 class AdvectEngine:
     """Main orchestrator for Advect-DAQ."""
@@ -18,6 +18,7 @@ class AdvectEngine:
         self.sensors: Dict[str, BaseSensor] = {}
         self.tasks: Dict[str, asyncio.Task] = {}
         self.last_success: Dict[str, float] = {}      # sensor_name -> timestamp
+        self.latest_data: Dict[str, List[DataPoint]] = {}
 
     async def initialize(self) -> None:
         """Initialize writer and all enabled sensors."""
@@ -57,6 +58,7 @@ class AdvectEngine:
                     await self.writer.write(dp)
 
                 if result.success:
+                    self.latest_data[sensor.name] = result.datapoints[:]
                     sensor.record_success()
                     self.last_success[sensor.name] = asyncio.get_running_loop().time()
                     backoff = 1.0
