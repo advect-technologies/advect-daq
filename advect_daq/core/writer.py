@@ -3,10 +3,10 @@ from pathlib import Path
 from typing import Optional
 
 import aiofiles
-
 from daq_tools.models import DataPoint
-from .config import WriterConfig
+
 from ..core.logging import log
+from .config import WriterConfig
 
 
 class AsyncJsonlWriter:
@@ -21,7 +21,9 @@ class AsyncJsonlWriter:
 
     async def start(self) -> None:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
-        self._next_flush_time = asyncio.get_running_loop().time() + self.config.flush_interval
+        self._next_flush_time = (
+            asyncio.get_running_loop().time() + self.config.flush_interval
+        )
         self._task = asyncio.create_task(self._writer_loop())
 
     async def stop(self) -> None:
@@ -39,7 +41,9 @@ class AsyncJsonlWriter:
     async def _writer_loop(self):
         while True:
             try:
-                remaining = max(0.0, self._next_flush_time - asyncio.get_running_loop().time())
+                remaining = max(
+                    0.0, self._next_flush_time - asyncio.get_running_loop().time()
+                )
                 dp = await asyncio.wait_for(self.queue.get(), remaining)
 
                 self._buffer.append(dp)
@@ -57,7 +61,9 @@ class AsyncJsonlWriter:
 
     async def _flush(self):
         if not self._buffer:
-            self._next_flush_time = asyncio.get_running_loop().time() + self.config.flush_interval
+            self._next_flush_time = (
+                asyncio.get_running_loop().time() + self.config.flush_interval
+            )
             return
 
         timestamp = int(asyncio.get_running_loop().time())
@@ -76,4 +82,6 @@ class AsyncJsonlWriter:
             log.warning(f"[Writer] Failed to write {file_path}: {e}")
 
         finally:
-            self._next_flush_time = asyncio.get_running_loop().time() + self.config.flush_interval
+            self._next_flush_time = (
+                asyncio.get_running_loop().time() + self.config.flush_interval
+            )

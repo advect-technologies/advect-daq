@@ -87,6 +87,20 @@ wheels = [
 ]
 
 [[package]]
+name = "adafruit-circuitpython-tmp117"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "adafruit-blinka" },
+    { name = "adafruit-circuitpython-busdevice" },
+    { name = "adafruit-circuitpython-register" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/97/34364c942c3050ddbe449d5945d9ed2cbcf4c40c5ffbcd187198e0504ce3/adafruit_circuitpython_tmp117-1.2.2.tar.gz", hash = "sha256:fad6060f901e7e3c9e5f19c9c0f4614da4e87434b9c4794568474811b99f869e", size = 28387, upload-time = "2026-04-23T21:10:39.92Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/66/895ded3c327c3dbbc649586676491b5235c18ac210412800465b434c0757/adafruit_circuitpython_tmp117-1.2.2-py3-none-any.whl", hash = "sha256:74352bb83b69d4f8d95b3c0b315e8632a1c6a35c4447aa2431dc341fb194b6c6", size = 8894, upload-time = "2026-04-23T21:10:38.799Z" },
+]
+
+[[package]]
 name = "adafruit-circuitpython-typing"
 version = "1.12.3"
 source = { registry = "https://pypi.org/simple" }
@@ -126,6 +140,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "adafruit-blinka" },
     { name = "adafruit-circuitpython-ina228" },
+    { name = "adafruit-circuitpython-tmp117" },
     { name = "aiofiles" },
     { name = "aiohttp" },
     { name = "daq-tools" },
@@ -138,6 +153,7 @@ dependencies = [
 requires-dist = [
     { name = "adafruit-blinka", specifier = ">=9.1.0" },
     { name = "adafruit-circuitpython-ina228", specifier = ">=2.0.5" },
+    { name = "adafruit-circuitpython-tmp117", specifier = ">=1.2.2" },
     { name = "aiofiles", specifier = ">=25.1.0" },
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "daq-tools", git = "https://github.com/advect-technologies/daq-tools.git" },
