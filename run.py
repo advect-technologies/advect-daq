@@ -9,24 +9,24 @@ import sys
 from pathlib import Path
 
 # Windows asyncio fix — must be very early
-if sys.platform == 'win32':
+if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from daq_tools import DAQIngestor
+
 from advect_daq.core.config import AdvectConfig
 from advect_daq.core.engine import AdvectEngine
-from advect_daq.core.logging import setup_logging, log
-from advect_daq.utils.discovery import discover_plugins, list_available_sensors
+from advect_daq.core.logging import log, setup_logging
 from advect_daq.core.status_server import StatusServer
-
-from daq_tools import DAQIngestor
+from advect_daq.utils.discovery import discover_plugins, list_available_sensors
 
 
 async def main():
     # Load config first
     config = AdvectConfig.from_toml()
-    
+
     # === Setup Logging ===
     setup_logging(
         log_level=config.logging.level,
@@ -52,10 +52,11 @@ async def main():
 
         # Start Status Server
         if config.status_server.enabled:
-            status_server = StatusServer(engine,
-                                         port=config.status_server.port,
-                                         expose_data=config.status_server.expose_data
-                                         )
+            status_server = StatusServer(
+                engine,
+                port=config.status_server.port,
+                expose_data=config.status_server.expose_data,
+            )
             await status_server.start()
 
         # Start DAQIngestor
@@ -77,7 +78,7 @@ async def main():
         log.exception("Unexpected error in main loop")
     finally:
         log.info("=== Starting graceful shutdown ===")
-        
+
         await engine.stop()
 
         if status_server:
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nAdvect-DAQ stopped.")        
+        print("\nAdvect-DAQ stopped.")
     except Exception as e:
         print(f"Fatal error: {e}")
         exit_code = 1

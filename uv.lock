@@ -325,8 +325,8 @@ wheels = [
 
 [[package]]
 name = "daq-tools"
-version = "0.2.4"
-source = { git = "https://github.com/advect-technologies/daq-tools.git#2f4e811180fc14d7b3444a1e9423fd8231920a95" }
+version = "0.3.0"
+source = { git = "https://github.com/advect-technologies/daq-tools.git#500d3352cb17d3e4494296f5b0e8f31f8f319df0" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
