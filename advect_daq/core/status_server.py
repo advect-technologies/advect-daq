@@ -2,7 +2,6 @@ import asyncio
 import datetime as dt
 from aiohttp import web
 
-from typing import List
 from .engine import AdvectEngine
 from .base import SensorErrorType
 from .logging import log
@@ -40,7 +39,7 @@ class StatusServer:
                     status=404
                 )
             data = {sensor_name: [_datapoint_to_dict(d) for d in self.engine.latest_data.get(sensor_name)]}
-            
+
         else:
             data = {
                 sensor_name: [_datapoint_to_dict(d) for d in dps]
@@ -79,14 +78,14 @@ class StatusServer:
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "active_sensors": len(self.engine.sensors),
             "sensors": sensors_status,
-            "writer_queue_size": getattr(self.engine.writer, 'queue', None).qsize() 
+            "writer_queue_size": getattr(self.engine.writer, 'queue', None).qsize()
                                if hasattr(self.engine.writer, 'queue') else 0,
         })
 
     async def html_status(self, request):
         """Dark mode dashboard"""
         now = asyncio.get_running_loop().time()
-        
+
         html = f"""
         <!DOCTYPE html>
         <html lang="en">
@@ -102,40 +101,40 @@ class StatusServer:
                     --text-muted: #a0a0a0;
                     --border: #2a3347;
                 }}
-                body {{ 
-                    font-family: 'Segoe UI', Arial, sans-serif; 
-                    margin: 0; 
-                    padding: 20px; 
-                    background: var(--bg); 
-                    color: var(--text); 
+                body {{
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                    background: var(--bg);
+                    color: var(--text);
                 }}
                 h1 {{ color: #4fc3f7; }}
                 .header {{ margin-bottom: 20px; }}
-                table {{ 
-                    border-collapse: collapse; 
-                    width: 100%; 
-                    background: var(--card); 
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                    background: var(--card);
                     border-radius: 8px;
                     overflow: hidden;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                 }}
-                th, td {{ 
-                    padding: 14px; 
-                    text-align: left; 
+                th, td {{
+                    padding: 14px;
+                    text-align: left;
                     border-bottom: 1px solid var(--border);
                 }}
-                th {{ 
-                    background: #1f2937; 
+                th {{
+                    background: #1f2937;
                     color: #90caf9;
                 }}
                 tr:hover {{ background: #252d3f; }}
                 .ok {{ color: #66ff99; font-weight: bold; }}
                 .warning {{ color: #ffcc33; font-weight: bold; }}
                 .error {{ color: #ff6666; font-weight: bold; }}
-                .error-msg {{ 
-                    background: #2a1f1f; 
-                    padding: 12px; 
-                    border-left: 5px solid #ff6666; 
+                .error-msg {{
+                    background: #2a1f1f;
+                    padding: 12px;
+                    border-left: 5px solid #ff6666;
                     font-family: monospace;
                     white-space: pre-wrap;
                 }}
@@ -149,7 +148,7 @@ class StatusServer:
                 <p class="refresh">Last updated: {dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')} UTC</p>
                 <p><strong>Active Sensors:</strong> {len(self.engine.sensors)}</p>
             </div>
-            
+
             <table>
                 <tr>
                     <th>Sensor</th>
@@ -202,7 +201,7 @@ class StatusServer:
             </table>
 
             <p style="margin-top: 30px;">
-                <a href="/status" style="color: #90caf9;">View JSON Status</a> | 
+                <a href="/status" style="color: #90caf9;">View JSON Status</a> |
                 <a href="/health" style="color: #90caf9;">Health Check</a>
             </p>
 

@@ -1,6 +1,5 @@
-import datetime as dt
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from .config import SensorConfig
 
@@ -13,7 +12,7 @@ class SensorErrorType(IntEnum):
     COMMUNICATION = 2     # Can talk to sensor but read failed
     DATA_QUALITY = 1      # Got data but it's bad (open TC, overrange, etc.)
     UNKNOWN = 4
-    
+
 @dataclass
 class SensorResult:
     """Standardized return value from sensor.read()"""

@@ -1,6 +1,6 @@
 import datetime as dt
 import random
-from typing import List, Dict
+from typing import Dict
 
 from daq_tools.models import DataPoint
 
