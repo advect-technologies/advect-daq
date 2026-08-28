@@ -27,7 +27,7 @@ class MCC134Sensor(BaseSensor):
 
         # Access sensor-specific config cleanly
 
-        if not config.extra.get("address"):
+        if config.extra.get("address") is None:
             raise RuntimeError("MCC134 sensor must have an address")
 
         self.address: int = int(config.extra.get("address"))
