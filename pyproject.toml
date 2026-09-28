@@ -14,6 +14,7 @@ dependencies = [
     "daqhats>=1.4.1.0",
     "loguru>=0.7.3",
     "rpi-gpio>=0.7.1 ; sys_platform == 'linux'",
+    "smbus2>=0.6.1",
 ]
 
 [tool.uv.sources]
