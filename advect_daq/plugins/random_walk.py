@@ -1,10 +1,9 @@
 import datetime as dt
 import random
-from typing import Dict
 
 from daq_tools.models import DataPoint
 
-from ..core.base import BaseSensor, SensorResult, SensorErrorType
+from ..core.base import BaseSensor, SensorErrorType, SensorResult
 from ..core.config import SensorConfig
 from ..core.logging import log
 
@@ -14,14 +13,14 @@ class RandomSensor(BaseSensor):
 
     SENSOR_TYPE = "random_walk"
 
-    def __init__(self, config: SensorConfig, global_tags: Dict[str, str]):
+    def __init__(self, config: SensorConfig, global_tags: dict[str, str]):
         super().__init__(config, global_tags)
-        self.max_values = config.extra.get('max_values', 4)
+        self.max_values = config.extra.get("max_values", 4)
         self.values = [round(random.uniform(20, 80), 3) for _ in range(self.max_values)]
-        log.success(f'Initialized Random Walk Sensor: {self.name}')
+        log.success(f"Initialized Random Walk Sensor: {self.name}")
 
     async def read(self) -> SensorResult:
-        sample_time = dt.datetime.now(dt.timezone.utc).timestamp()
+        sample_time = dt.datetime.now(dt.UTC).timestamp()
 
         # Random walk
         self.values = [round(v + random.gauss(0, 0.5), 3) for v in self.values]
@@ -34,17 +33,17 @@ class RandomSensor(BaseSensor):
             time=sample_time,
             measurement=self.measurement,
             tags=self.tags,
-            fields=fields
+            fields=fields,
         )
 
         # Occasionally simulate an error
-        if random.random() < 0.08:   # ~8% chance
+        if random.random() < 0.08:  # ~8% chance
             log.warning(f"[RandomWalk:{self.name}] Simulated error")
             return SensorResult(
                 datapoints=[dp],
                 success=False,
                 error_type=SensorErrorType.DATA_QUALITY,
-                error_message="Simulated sensor error"
+                error_message="Simulated sensor error",
             )
 
         return SensorResult(datapoints=[dp])

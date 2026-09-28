@@ -1,5 +1,4 @@
 import datetime as dt
-from typing import Dict, List, Optional
 
 import adafruit_tmp117
 import board
@@ -13,13 +12,13 @@ from ..core.logging import log
 class TMP117Sensor(BaseSensor):
     SENSOR_TYPE = "tmp117"
 
-    def __init__(self, config: SensorConfig, global_tags: Dict[str, str]):
+    def __init__(self, config: SensorConfig, global_tags: dict[str, str]):
         super().__init__(config, global_tags)
 
         # tmp117-specific configuration from .extra
         self.i2c_address: int = int(config.extra.get("i2c_address", 0x48))
-        self.tags["address"] = self.i2c_address
-        self._sensor: Optional[adafruit_tmp117.TMP117] = None
+        self.tags["address"] = str(self.i2c_address)
+        self._sensor: adafruit_tmp117.TMP117 | None = None
 
     async def initialize(self) -> None:
         """Initialize the tmp117 over I2C."""
@@ -40,8 +39,8 @@ class TMP117Sensor(BaseSensor):
         if not self._sensor:
             raise RuntimeError("tmp117 not initialized")
 
-        datapoints: List[DataPoint] = []
-        sample_time = dt.datetime.now(dt.timezone.utc).timestamp()
+        datapoints: list[DataPoint] = []
+        sample_time = dt.datetime.now(dt.UTC).timestamp()
 
         try:
             # Read all key values

@@ -1,13 +1,13 @@
 import asyncio
-from typing import Dict, List
 
-from .base import BaseSensor, SensorResult, SensorErrorType
-from .config import AdvectConfig
-from .writer import AsyncJsonlWriter
-from ..utils.discovery import get_sensor_class
-
-from .logging import log
 from daq_tools.models import DataPoint
+
+from ..utils.discovery import get_sensor_class
+from .base import BaseSensor, SensorErrorType, SensorResult
+from .config import AdvectConfig
+from .logging import log
+from .writer import AsyncJsonlWriter
+
 
 class AdvectEngine:
     """Main orchestrator for Advect-DAQ."""
@@ -15,10 +15,10 @@ class AdvectEngine:
     def __init__(self, config: AdvectConfig):
         self.config = config
         self.writer = AsyncJsonlWriter(config.writer)
-        self.sensors: Dict[str, BaseSensor] = {}
-        self.tasks: Dict[str, asyncio.Task] = {}
-        self.last_success: Dict[str, float] = {}      # sensor_name -> timestamp
-        self.latest_data: Dict[str, List[DataPoint]] = {}
+        self.sensors: dict[str, BaseSensor] = {}
+        self.tasks: dict[str, asyncio.Task] = {}
+        self.last_success: dict[str, float] = {}  # sensor_name -> timestamp
+        self.latest_data: dict[str, list[DataPoint]] = {}
 
     async def initialize(self) -> None:
         """Initialize writer and all enabled sensors."""
@@ -31,16 +31,21 @@ class AdvectEngine:
 
             try:
                 SensorClass = get_sensor_class(sensor_cfg.type)
-                sensor = SensorClass(config=sensor_cfg, global_tags=self.config.global_tags)
-                
+                sensor = SensorClass(
+                    config=sensor_cfg, global_tags=self.config.global_tags
+                )
+
                 await sensor.initialize()
                 self.sensors[sensor.name] = sensor
                 self.last_success[sensor.name] = asyncio.get_running_loop().time()
-                
+
                 log.info(f"Initialized sensor: {sensor.name} (type: {sensor_cfg.type})")
-                
+
             except Exception as e:
-                log.error(f"Failed to initialize sensor '{sensor_cfg.name}': {e}", exc_info=True)
+                log.error(
+                    f"Failed to initialize sensor '{sensor_cfg.name}': {e}",
+                    exc_info=True,
+                )
 
         if not self.sensors:
             log.warning("No sensors were successfully initialized")
@@ -64,11 +69,15 @@ class AdvectEngine:
                     backoff = 1.0
                 elif result.error_type <= SensorErrorType.DATA_QUALITY:
                     self.latest_data[sensor.name] = result.datapoints[:]
-                    sensor.record_error(result.error_type, result.error_message or "Unknown error")
+                    sensor.record_error(
+                        result.error_type, result.error_message or "Unknown error"
+                    )
                     self.last_success[sensor.name] = asyncio.get_running_loop().time()
-                    backoff = 1.0            
+                    backoff = 1.0
                 else:
-                    sensor.record_error(result.error_type, result.error_message or "Unknown error")
+                    sensor.record_error(
+                        result.error_type, result.error_message or "Unknown error"
+                    )
 
                 await asyncio.sleep(sensor.interval)
 
@@ -81,11 +90,12 @@ class AdvectEngine:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
 
-
     async def start(self) -> None:
         """Start all sensor runner tasks and status summary."""
         for name, sensor in self.sensors.items():
-            task = asyncio.create_task(self._sensor_runner(sensor), name=f"sensor_{name}")
+            task = asyncio.create_task(
+                self._sensor_runner(sensor), name=f"sensor_{name}"
+            )
             self.tasks[name] = task
 
         log.info(f"AdvectEngine started with {len(self.sensors)} active sensor(s)")
@@ -111,15 +121,15 @@ async def run_advect_daq(config_path: str = "config/sensors.toml"):
     """Main entry point function used by run.py"""
     config = AdvectConfig.from_toml(config_path)
     engine = AdvectEngine(config)
-    
+
     try:
         await engine.initialize()
         await engine.start()
-        
+
         # Keep the program running
         while True:
             await asyncio.sleep(3600)
-            
+
     except asyncio.CancelledError:
         log.info("Shutdown requested")
     except KeyboardInterrupt:

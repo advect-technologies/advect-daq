@@ -1,5 +1,4 @@
 import asyncio
-from typing import Optional
 
 import aiofiles
 from daq_tools.models import DataPoint
@@ -14,7 +13,7 @@ class AsyncJsonlWriter:
     def __init__(self, config: WriterConfig):
         self.config = config
         self.queue: asyncio.Queue[DataPoint] = asyncio.Queue()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._buffer: list[DataPoint] = []
         self._next_flush_time: float = 0.0
 
@@ -50,7 +49,7 @@ class AsyncJsonlWriter:
                 if len(self._buffer) >= self.config.batch_size:
                     await self._flush()
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await self._flush()
             except asyncio.CancelledError:
                 await self._flush()

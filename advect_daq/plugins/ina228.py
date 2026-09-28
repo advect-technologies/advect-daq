@@ -1,63 +1,69 @@
 import datetime as dt
-from typing import Dict, List
 
-import board
 import adafruit_ina228
+import board
 from daq_tools.models import DataPoint
 
-from ..core.base import BaseSensor, SensorResult, SensorErrorType
+from ..core.base import BaseSensor, SensorErrorType, SensorResult
 from ..core.config import SensorConfig
 from ..core.logging import log
+
 
 class INA228Sensor(BaseSensor):
     """Adafruit INA228 High-Side/Low-Side Power Monitor plugin."""
 
     SENSOR_TYPE = "ina228"
 
-    def __init__(self, config: SensorConfig, global_tags: Dict[str, str]):
+    def __init__(self, config: SensorConfig, global_tags: dict[str, str]):
         super().__init__(config, global_tags)
 
         # INA228-specific configuration from .extra
         self.i2c_address: int = int(config.extra.get("i2c_address", 0x40))
-        self.shunt_resistance: float = float(config.extra.get("shunt_resistance", 0.015))  # ohms
-        self.tags['address'] = self.i2c_address 
+        self.shunt_resistance: float = float(
+            config.extra.get("shunt_resistance", 0.015)
+        )  # ohms
+        self.tags["address"] = self.i2c_address
         self.ina = None
 
     async def initialize(self) -> None:
         """Initialize the INA228 over I2C."""
         try:
-            i2c = board.I2C()  
+            i2c = board.I2C()
             self.ina = adafruit_ina228.INA228(i2c, address=self.i2c_address)
-            log.success(f"INA228 [{hex(self.i2c_address)}] initialized - Shunt: {self.shunt_resistance} Ω")
+            log.success(
+                f"INA228 [{hex(self.i2c_address)}] initialized - Shunt: {self.shunt_resistance} Ω"
+            )
 
         except Exception as e:
             log.error(f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}")
-            raise RuntimeError(f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}") from e
+            raise RuntimeError(
+                f"Failed to initialize INA228 at {hex(self.i2c_address)}: {e}"
+            ) from e
 
     async def read(self) -> SensorResult:
         if not self.ina:
             raise RuntimeError("INA228 not initialized")
 
-        datapoints: List[DataPoint] = []
-        sample_time = dt.datetime.now(dt.timezone.utc).timestamp()
+        datapoints: list[DataPoint] = []
+        sample_time = dt.datetime.now(dt.UTC).timestamp()
 
         try:
             # Read all key values
-            bus_voltage = float(self.ina.bus_voltage)          # V
-            shunt_voltage = float(self.ina.shunt_voltage)      # V (often converted to mV)
-            current = float(self.ina.current)                  # mA
-            power = float(self.ina.power)                      # mW
-            energy = float(self.ina.energy)                    # J (accumulated)
-            die_temp = float(self.ina.die_temperature)         # °C
+            bus_voltage = float(self.ina.bus_voltage)  # V
+            shunt_voltage = float(self.ina.shunt_voltage)  # V (often converted to mV)
+            current = float(self.ina.current)  # mA
+            power = float(self.ina.power)  # mW
+            energy = float(self.ina.energy)  # J (accumulated)
+            die_temp = float(self.ina.die_temperature)  # °C
 
             fields = {
                 "bus_voltage": round(bus_voltage, 4),
-                "shunt_voltage": round(shunt_voltage * 1000, 3),   # mV
-                "current": round(current, 3),                      # mA
-                "power": round(power, 3),                          # mW
-                "energy": round(energy, 3),                        # J
+                "shunt_voltage": round(shunt_voltage * 1000, 3),  # mV
+                "current": round(current, 3),  # mA
+                "power": round(power, 3),  # mW
+                "energy": round(energy, 3),  # J
                 "die_temperature": round(die_temp, 2),
-                "error_code": 0
+                "error_code": 0,
             }
 
             # Add shunt resistance as metadata if desired
@@ -65,7 +71,7 @@ class INA228Sensor(BaseSensor):
                 time=sample_time,
                 measurement=self.measurement,
                 tags=self.tags,
-                fields=fields
+                fields=fields,
             )
             datapoints.append(dp)
             return SensorResult(datapoints=datapoints)
@@ -80,16 +86,16 @@ class INA228Sensor(BaseSensor):
                     "bus_voltage": None,
                     "current": None,
                     "power": None,
-                    "error_code": 99
-                }
+                    "error_code": 99,
+                },
             )
             datapoints.append(dp)
-        
+
             return SensorResult(
                 datapoints=datapoints,
                 success=False,
                 error_type=SensorErrorType.COMMUNICATION,
-                error_message=str(e)
+                error_message=str(e),
             )
 
     async def shutdown(self) -> None:

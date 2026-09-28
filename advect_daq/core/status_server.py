@@ -1,44 +1,56 @@
 import asyncio
 import datetime as dt
-from aiohttp import web
-
-from .engine import AdvectEngine
-from .base import SensorErrorType
-from .logging import log
-from daq_tools.models import DataPoint
 from dataclasses import asdict
 
-def _datapoint_to_dict(dp:DataPoint):
+from aiohttp import web
+from daq_tools.models import DataPoint
+
+from .base import SensorErrorType
+from .engine import AdvectEngine
+from .logging import log
+
+
+def _datapoint_to_dict(dp: DataPoint):
     try:
         return asdict(dp)
-    except:
-        {}
+    except Exception:
+        return {}
+
 
 class StatusServer:
-    def __init__(self, engine: AdvectEngine, port: int = 8080, expose_data: bool = False):
+    def __init__(
+        self, engine: AdvectEngine, port: int = 8080, expose_data: bool = False
+    ):
         self.engine = engine
         self.port = port
         self.runner = None
         self.expose_data = expose_data
 
     async def health(self, request):
-        return web.json_response({
-            "status": "healthy",
-            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "active_sensors": len(self.engine.sensors)
-        })
+        return web.json_response(
+            {
+                "status": "healthy",
+                "timestamp": dt.datetime.now(dt.UTC).isoformat(),
+                "active_sensors": len(self.engine.sensors),
+            }
+        )
 
     async def latest_data(self, request):
         """Return latest raw sensor readings as JSON."""
-        sensor_name = request.query.get("sensor")   # ?sensor=some_sensor
+        sensor_name = request.query.get("sensor")  # ?sensor=some_sensor
 
         if sensor_name:
             if sensor_name not in self.engine.latest_data:
                 return web.json_response(
                     {"error": f"Sensor '{sensor_name}' not found or has no data yet"},
-                    status=404
+                    status=404,
                 )
-            data = {sensor_name: [_datapoint_to_dict(d) for d in self.engine.latest_data.get(sensor_name)]}
+            data = {
+                sensor_name: [
+                    _datapoint_to_dict(d)
+                    for d in self.engine.latest_data.get(sensor_name)
+                ]
+            }
 
         else:
             data = {
@@ -46,11 +58,13 @@ class StatusServer:
                 for sensor_name, dps in self.engine.latest_data.items()
             }
 
-        return web.json_response({
-            "status": "ok",
-            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "data": data
-        })
+        return web.json_response(
+            {
+                "status": "ok",
+                "timestamp": dt.datetime.now(dt.UTC).isoformat(),
+                "data": data,
+            }
+        )
 
     async def status(self, request):
         now = asyncio.get_running_loop().time()
@@ -60,27 +74,32 @@ class StatusServer:
             last = self.engine.last_success.get(name, 0)
             age = now - last if last > 0 else None
 
-            sensor_type = getattr(getattr(sensor, 'config', None), 'type', 'unknown')
+            sensor_type = getattr(getattr(sensor, "config", None), "type", "unknown")
 
-            sensors_status.append({
-                "name": name,
-                "type": sensor_type,
-                "interval": sensor.interval,
-                "last_read_seconds_ago": round(age, 1) if age is not None else None,
-                "healthy": sensor.healthy,
-                "error_type": sensor.last_error_type.value,
-                "error_message": sensor.last_error,
-                "consecutive_errors": sensor.consecutive_errors
-            })
+            sensors_status.append(
+                {
+                    "name": name,
+                    "type": sensor_type,
+                    "interval": sensor.interval,
+                    "last_read_seconds_ago": round(age, 1) if age is not None else None,
+                    "healthy": sensor.healthy,
+                    "error_type": sensor.last_error_type.value,
+                    "error_message": sensor.last_error,
+                    "consecutive_errors": sensor.consecutive_errors,
+                }
+            )
 
-        return web.json_response({
-            "status": "running",
-            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "active_sensors": len(self.engine.sensors),
-            "sensors": sensors_status,
-            "writer_queue_size": getattr(self.engine.writer, 'queue', None).qsize()
-                               if hasattr(self.engine.writer, 'queue') else 0,
-        })
+        return web.json_response(
+            {
+                "status": "running",
+                "timestamp": dt.datetime.now(dt.UTC).isoformat(),
+                "active_sensors": len(self.engine.sensors),
+                "sensors": sensors_status,
+                "writer_queue_size": getattr(self.engine.writer, "queue", None).qsize()
+                if hasattr(self.engine.writer, "queue")
+                else 0,
+            }
+        )
 
     async def html_status(self, request):
         """Dark mode dashboard"""
@@ -145,7 +164,7 @@ class StatusServer:
         <body>
             <div class="header">
                 <h1>Advect-DAQ Status</h1>
-                <p class="refresh">Last updated: {dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')} UTC</p>
+                <p class="refresh">Last updated: {dt.datetime.now(dt.UTC).isoformat(timespec="seconds")} UTC</p>
                 <p><strong>Active Sensors:</strong> {len(self.engine.sensors)}</p>
             </div>
 
@@ -180,7 +199,7 @@ class StatusServer:
             html += f"""
                 <tr class="expandable" onclick="toggleError('{name}')">
                     <td><strong>{name}</strong></td>
-                    <td>{getattr(getattr(sensor, 'config', None), 'type', 'unknown')}</td>
+                    <td>{getattr(getattr(sensor, "config", None), "type", "unknown")}</td>
                     <td>{sensor.interval}s</td>
                     <td>{age_str}</td>
                     <td class="{status_class}">{status_text}</td>
@@ -191,7 +210,7 @@ class StatusServer:
                         <div class="error-msg">
                             <strong>Error Type:</strong> {error_type.value}<br>
                             <strong>Consecutive Errors:</strong> {sensor.consecutive_errors}<br>
-                            <strong>Message:</strong> {sensor.last_error or 'No error'}
+                            <strong>Message:</strong> {sensor.last_error or "No error"}
                         </div>
                     </td>
                 </tr>
@@ -214,20 +233,20 @@ class StatusServer:
         </body>
         </html>
         """
-        return web.Response(text=html, content_type='text/html')
+        return web.Response(text=html, content_type="text/html")
 
     async def start(self):
         app = web.Application()
-        app.router.add_get('/health', self.health)
-        app.router.add_get('/status', self.status)
-        app.router.add_get('/', self.html_status)
+        app.router.add_get("/health", self.health)
+        app.router.add_get("/status", self.status)
+        app.router.add_get("/", self.html_status)
         if self.expose_data:
-            app.router.add_get('/data', self.latest_data)
-            app.router.add_get('/data/{sensor}', self.latest_data)
+            app.router.add_get("/data", self.latest_data)
+            app.router.add_get("/data/{sensor}", self.latest_data)
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', self.port)
+        site = web.TCPSite(runner, "0.0.0.0", self.port)
         await site.start()
 
         self.runner = runner

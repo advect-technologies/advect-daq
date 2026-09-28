@@ -30,7 +30,7 @@ class MCC134Sensor(BaseSensor):
         if config.extra.get("address") is None:
             raise RuntimeError("MCC134 sensor must have an address")
 
-        self.address: int = int(config.extra.get("address"))
+        self.address: int = int(config.extra.get("address", 0))
         self.channels: list[int] = config.extra.get("channels", [0, 1, 2, 3])
         self.tc_types: list[str] = config.extra.get(
             "tc_types", ["K"] * len(self.channels)

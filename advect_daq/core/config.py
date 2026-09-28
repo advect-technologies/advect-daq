@@ -1,9 +1,8 @@
 import logging
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
-
-import tomllib
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +13,7 @@ class WriterConfig:
     batch_size: int = 100
     flush_interval: float = 10.0
 
+
 @dataclass
 class LoggingConfig:
     level: str = "INFO"
@@ -21,11 +21,13 @@ class LoggingConfig:
     log_dir: str = "logs"
     retention_days: int = 7
 
+
 @dataclass
 class StatusServerConfig:
     enabled: bool = False
     port: int = 8081
     expose_data: bool = False
+
 
 @dataclass
 class SensorConfig:
@@ -33,18 +35,20 @@ class SensorConfig:
     name: str = ""
     interval: float = 1.0
     measurement: str = ""
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.measurement: raise RuntimeError(f'Sensor {self.name} must have a non null measurement')
+        if not self.measurement:
+            raise RuntimeError(f"Sensor {self.name} must have a non null measurement")
+
 
 @dataclass
 class AdvectConfig:
     writer: WriterConfig
-    sensors: List[SensorConfig]
-    global_tags: Dict[str, str] = field(default_factory=dict)
+    sensors: list[SensorConfig]
+    global_tags: dict[str, str] = field(default_factory=dict)
     ingestor_config: str = "config/data_config.toml"
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     status_server: StatusServerConfig = field(default_factory=StatusServerConfig)
@@ -55,11 +59,13 @@ class AdvectConfig:
 
         # === Handle sensors.toml fallback ===
         if not path.exists():
-            logger.warning(f"⚠️  sensors.toml not found at {path}. Falling back to default_sensors.toml")
+            logger.warning(
+                f"⚠️  sensors.toml not found at {path}. Falling back to default_sensors.toml"
+            )
             path = Path("config/default_sensors.toml")
             if not path.exists():
                 raise FileNotFoundError(
-                    f"Neither sensors.toml nor default_sensors.toml found in config/ directory."
+                    "Neither sensors.toml nor default_sensors.toml found in config/ directory."
                 )
 
         with open(path, "rb") as f:
@@ -75,18 +81,21 @@ class AdvectConfig:
             flush_interval=writer_data.get("flush_interval", 10.0),
         )
 
-
         # === Handle ingestor_config fallback ===
         ingestor_config = global_data.get("ingestor_config", "config/data_config.toml")
         ingestor_path = Path(ingestor_config)
 
         if not ingestor_path.exists():
-            logger.warning(f"⚠️  Ingestor config not found at {ingestor_path}. Falling back to default_data_config.toml")
+            logger.warning(
+                f"⚠️  Ingestor config not found at {ingestor_path}. Falling back to default_data_config.toml"
+            )
             fallback_path = Path("config/default_data_config.toml")
             if fallback_path.exists():
                 ingestor_config = str(fallback_path)
             else:
-                logger.error(f"❌ Neither {ingestor_path} nor default_data_config.toml found!")
+                logger.error(
+                    f"❌ Neither {ingestor_path} nor default_data_config.toml found!"
+                )
                 # We'll still proceed but DAQIngestor will likely fail later
 
         # === Logging config ===
@@ -103,19 +112,21 @@ class AdvectConfig:
         status_server_config = StatusServerConfig(
             enabled=status_data.get("enabled", True),
             port=int(status_data.get("port", 8081)),
-            expose_data=status_data.get('expose_data',False)
+            expose_data=status_data.get("expose_data", False),
         )
 
         sensor_data = data.get("sensors", [])
-        sensors: List[SensorConfig] = []
-        name_counter: Dict[str, int] = {}
+        sensors: list[SensorConfig] = []
+        name_counter: dict[str, int] = {}
 
         for i, s in enumerate(sensor_data, 1):
             sensor_type = s.get("type")
             if not sensor_type:
                 raise ValueError(f"Sensor #{i} missing required field 'type'")
 
-            base_name = s.get("name") or f"{sensor_type}_{name_counter.get(sensor_type, 1)}"
+            base_name = (
+                s.get("name") or f"{sensor_type}_{name_counter.get(sensor_type, 1)}"
+            )
             name_counter[sensor_type] = name_counter.get(sensor_type, 0) + 1
 
             sensor_config = SensorConfig(
@@ -141,5 +152,5 @@ class AdvectConfig:
             status_server=status_server_config,
             logging=logging_config,
             global_tags=global_tags,
-            ingestor_config=ingestor_config
+            ingestor_config=ingestor_config,
         )

@@ -1,21 +1,21 @@
 import importlib
 import inspect
 import pkgutil
-from pathlib import Path
-from typing import Dict, Type
 
 from ..core.base import BaseSensor
 from ..core.logging import log
 
 # Registry of sensor types -> Sensor classes
-_SENSOR_REGISTRY: Dict[str, Type[BaseSensor]] = {}
+_SENSOR_REGISTRY: dict[str, type[BaseSensor]] = {}
 
 
-def register_sensor(sensor_class: Type[BaseSensor]) -> None:
+def register_sensor(sensor_class: type[BaseSensor]) -> None:
     """Decorator to manually register a sensor class (optional)."""
     if not hasattr(sensor_class, "SENSOR_TYPE") or sensor_class.SENSOR_TYPE == "base":
-        raise ValueError(f"Sensor class {sensor_class.__name__} must define SENSOR_TYPE")
-    
+        raise ValueError(
+            f"Sensor class {sensor_class.__name__} must define SENSOR_TYPE"
+        )
+
     _SENSOR_REGISTRY[sensor_class.SENSOR_TYPE] = sensor_class
     return sensor_class
 
@@ -39,15 +39,17 @@ def discover_plugins() -> None:
             log.warning(f"Warning: Failed to load plugin module '{module_name}': {e}")
 
 
-def get_sensor_class(sensor_type: str) -> Type[BaseSensor]:
+def get_sensor_class(sensor_type: str) -> type[BaseSensor]:
     """Get sensor class by type. Raises KeyError if not found."""
     if not _SENSOR_REGISTRY:
         discover_plugins()
-    
+
     if sensor_type not in _SENSOR_REGISTRY:
-        raise ValueError(f"No sensor plugin found for type: '{sensor_type}'. "
-                        f"Available: {list(_SENSOR_REGISTRY.keys())}")
-    
+        raise ValueError(
+            f"No sensor plugin found for type: '{sensor_type}'. "
+            f"Available: {list(_SENSOR_REGISTRY.keys())}"
+        )
+
     return _SENSOR_REGISTRY[sensor_type]
 
 

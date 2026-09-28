@@ -15,9 +15,7 @@ class InterceptHandler(logging.Handler):
         except ValueError:
             level = record.levelno
 
-        logger.opt(depth=6, exception=record.exc_info).log(
-            level, record.getMessage()
-        )
+        logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
 
 
 def setup_logging(
@@ -49,7 +47,7 @@ def setup_logging(
         level=level_no,
         colorize=True,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:8}</level> | <cyan>{name:12}</cyan> | {message}",
-        enqueue=True,          # Thread-safe / asyncio friendly
+        enqueue=True,  # Thread-safe / asyncio friendly
     )
 
     # === Optional File Logging ===
@@ -60,7 +58,7 @@ def setup_logging(
         logger.add(
             log_path / "advect-daq_{time:YYYY-MM-DD}.log",
             level=level_no,
-            rotation="00:00",           # Rotate at midnight
+            rotation="00:00",  # Rotate at midnight
             retention=f"{retention_days} days",
             compression="zip",
             enqueue=True,
