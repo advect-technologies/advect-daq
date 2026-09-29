@@ -34,6 +34,7 @@ class SensorConfig:
     type: str
     name: str = ""
     interval: float = 1.0
+    write_interval: float | None = None
     measurement: str = ""
     tags: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
@@ -42,6 +43,10 @@ class SensorConfig:
     def __post_init__(self):
         if not self.measurement:
             raise RuntimeError(f"Sensor {self.name} must have a non null measurement")
+        if self.write_interval is not None and self.write_interval <= 0:
+            raise ValueError(
+                f"Sensor {self.name} write_interval must be > 0, got {self.write_interval}"
+            )
 
 
 @dataclass
@@ -129,16 +134,28 @@ class AdvectConfig:
             )
             name_counter[sensor_type] = name_counter.get(sensor_type, 0) + 1
 
+            raw_write = s.get("write_interval")
+            write_interval = float(raw_write) if raw_write is not None else None
+
             sensor_config = SensorConfig(
                 type=sensor_type,
                 name=base_name,
                 interval=float(s.get("interval", 1.0)),
+                write_interval=write_interval,
                 measurement=s.get("measurement", ""),
                 tags=s.get("tags", {}),
                 enabled=s.get("enabled", True),
             )
 
-            known_keys = {"type", "name", "interval", "measurement", "tags", "enabled"}
+            known_keys = {
+                "type",
+                "name",
+                "interval",
+                "write_interval",
+                "measurement",
+                "tags",
+                "enabled",
+            }
             sensor_config.extra = {k: v for k, v in s.items() if k not in known_keys}
 
             sensors.append(sensor_config)

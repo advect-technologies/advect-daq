@@ -10,9 +10,9 @@ from .config import SensorConfig
 
 class SensorErrorType(IntEnum):
     NONE = 0
-    AVAILABILITY = 3  # Sensor completely unreachable (e.g. board not found)
-    COMMUNICATION = 2  # Can talk to sensor but read failed
     DATA_QUALITY = 1  # Got data but it's bad (open TC, overrange, etc.)
+    COMMUNICATION = 2  # Can talk to sensor but read failed
+    AVAILABILITY = 3  # Sensor completely unreachable (e.g. board not found)
     UNKNOWN = 4
 
 

@@ -1,12 +1,13 @@
 import asyncio
 import datetime as dt
+import json
 from dataclasses import asdict
 
-from aiohttp import web
+from aiohttp import WSMsgType, web
 from daq_tools.models import DataPoint
 
 from .base import SensorErrorType
-from .engine import AdvectEngine
+from .engine import AdvectEngine, LiveEvent
 from .logging import log
 
 
@@ -15,6 +16,21 @@ def _datapoint_to_dict(dp: DataPoint):
         return asdict(dp)
     except Exception:
         return {}
+
+
+def _event_to_dict(event: LiveEvent, include_data: bool) -> dict:
+    payload = {
+        "type": event.type,
+        "sensor": event.sensor,
+        "success": event.success,
+        "healthy": event.healthy,
+        "error_type": int(event.error_type),
+        "error_message": event.error_message,
+        "timestamp": dt.datetime.now(dt.UTC).isoformat(),
+    }
+    if include_data:
+        payload["datapoints"] = [_datapoint_to_dict(dp) for dp in event.datapoints]
+    return payload
 
 
 class StatusServer:
@@ -37,7 +53,7 @@ class StatusServer:
 
     async def latest_data(self, request):
         """Return latest raw sensor readings as JSON."""
-        sensor_name = request.query.get("sensor")  # ?sensor=some_sensor
+        sensor_name = request.query.get("sensor") or request.match_info.get("sensor")
 
         if sensor_name:
             if sensor_name not in self.engine.latest_data:
@@ -66,21 +82,24 @@ class StatusServer:
             }
         )
 
-    async def status(self, request):
+    def _sensor_status_rows(self) -> list[dict]:
         now = asyncio.get_running_loop().time()
         sensors_status = []
 
         for name, sensor in self.engine.sensors.items():
             last = self.engine.last_success.get(name, 0)
             age = now - last if last > 0 else None
-
             sensor_type = getattr(getattr(sensor, "config", None), "type", "unknown")
+            write_interval = getattr(
+                getattr(sensor, "config", None), "write_interval", None
+            )
 
             sensors_status.append(
                 {
                     "name": name,
                     "type": sensor_type,
                     "interval": sensor.interval,
+                    "write_interval": write_interval,
                     "last_read_seconds_ago": round(age, 1) if age is not None else None,
                     "healthy": sensor.healthy,
                     "error_type": sensor.last_error_type.value,
@@ -88,30 +107,63 @@ class StatusServer:
                     "consecutive_errors": sensor.consecutive_errors,
                 }
             )
+        return sensors_status
 
+    async def status(self, request):
         return web.json_response(
             {
                 "status": "running",
                 "timestamp": dt.datetime.now(dt.UTC).isoformat(),
                 "active_sensors": len(self.engine.sensors),
-                "sensors": sensors_status,
+                "sensors": self._sensor_status_rows(),
                 "writer_queue_size": getattr(self.engine.writer, "queue", None).qsize()
                 if hasattr(self.engine.writer, "queue")
                 else 0,
             }
         )
 
-    async def html_status(self, request):
-        """Dark mode dashboard"""
-        now = asyncio.get_running_loop().time()
+    async def websocket(self, request):
+        ws = web.WebSocketResponse(heartbeat=30.0)
+        await ws.prepare(request)
+        queue = self.engine.subscribe_live()
+        log.info("Live WS client connected")
 
+        async def pump():
+            while not ws.closed:
+                event = await queue.get()
+                payload = _event_to_dict(event, include_data=self.expose_data)
+                await ws.send_json(payload)
+
+        pump_task = asyncio.create_task(pump())
+        try:
+            async for msg in ws:
+                if msg.type in {WSMsgType.CLOSE, WSMsgType.ERROR}:
+                    break
+        finally:
+            pump_task.cancel()
+            try:
+                await pump_task
+            except asyncio.CancelledError:
+                pass
+            self.engine.unsubscribe_live(queue)
+            if not ws.closed:
+                await ws.close()
+            log.info("Live WS client disconnected")
+        return ws
+
+    async def html_status(self, request):
+        """Live dashboard driven by /ws. JSON routes are unchanged."""
+        initial = {
+            "sensors": self._sensor_status_rows(),
+            "expose_data": self.expose_data,
+        }
+        bootstrap = json.dumps(initial)
         html = f"""
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <title>Advect-DAQ • Status</title>
-            <meta http-equiv="refresh" content="12">
+            <title>Advect-DAQ • Live</title>
             <style>
                 :root {{
                     --bg: #0f1117;
@@ -141,6 +193,7 @@ class StatusServer:
                     padding: 14px;
                     text-align: left;
                     border-bottom: 1px solid var(--border);
+                    vertical-align: top;
                 }}
                 th {{
                     background: #1f2937;
@@ -150,85 +203,91 @@ class StatusServer:
                 .ok {{ color: #66ff99; font-weight: bold; }}
                 .warning {{ color: #ffcc33; font-weight: bold; }}
                 .error {{ color: #ff6666; font-weight: bold; }}
-                .error-msg {{
-                    background: #2a1f1f;
-                    padding: 12px;
-                    border-left: 5px solid #ff6666;
-                    font-family: monospace;
-                    white-space: pre-wrap;
-                }}
-                .expandable {{ cursor: pointer; }}
+                .muted {{ color: var(--text-muted); }}
+                .fields {{ font-family: monospace; font-size: 0.85em; white-space: pre-wrap; }}
                 .refresh {{ color: var(--text-muted); font-size: 0.9em; }}
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>Advect-DAQ Status</h1>
-                <p class="refresh">Last updated: {dt.datetime.now(dt.UTC).isoformat(timespec="seconds")} UTC</p>
-                <p><strong>Active Sensors:</strong> {len(self.engine.sensors)}</p>
+                <h1>Advect-DAQ Live</h1>
+                <p class="refresh">WS: <span id="ws-state">connecting</span> · last event: <span id="last-event">—</span></p>
+                <p><strong>Active Sensors:</strong> <span id="active-count">{len(self.engine.sensors)}</span></p>
             </div>
-
             <table>
-                <tr>
-                    <th>Sensor</th>
-                    <th>Type</th>
-                    <th>Interval</th>
-                    <th>Last Read</th>
-                    <th>Status</th>
-                    <th>Info</th>
-                </tr>
-        """
-
-        for name, sensor in self.engine.sensors.items():
-            last = self.engine.last_success.get(name, 0)
-            age = now - last if last > 0 else None
-            error_type = sensor.last_error_type
-
-            if sensor.healthy and age is not None and age < sensor.interval * 4:
-                status_class = "ok"
-                status_text = "OK"
-            elif error_type == SensorErrorType.DATA_QUALITY:
-                status_class = "warning"
-                status_text = "WARNING"
-            else:
-                status_class = "error"
-                status_text = "ERROR"
-
-            age_str = f"{round(age, 1)}s ago" if age is not None else "Never"
-
-            html += f"""
-                <tr class="expandable" onclick="toggleError('{name}')">
-                    <td><strong>{name}</strong></td>
-                    <td>{getattr(getattr(sensor, "config", None), "type", "unknown")}</td>
-                    <td>{sensor.interval}s</td>
-                    <td>{age_str}</td>
-                    <td class="{status_class}">{status_text}</td>
-                    <td>▼</td>
-                </tr>
-                <tr id="error-{name}" style="display: none;">
-                    <td colspan="6">
-                        <div class="error-msg">
-                            <strong>Error Type:</strong> {error_type.value}<br>
-                            <strong>Consecutive Errors:</strong> {sensor.consecutive_errors}<br>
-                            <strong>Message:</strong> {sensor.last_error or "No error"}
-                        </div>
-                    </td>
-                </tr>
-            """
-
-        html += """
+                <thead>
+                    <tr>
+                        <th>Sensor</th>
+                        <th>Type</th>
+                        <th>Interval</th>
+                        <th>Write</th>
+                        <th>Status</th>
+                        <th>Last sample</th>
+                    </tr>
+                </thead>
+                <tbody id="sensor-rows"></tbody>
             </table>
-
             <p style="margin-top: 30px;">
-                <a href="/status" style="color: #90caf9;">View JSON Status</a> |
-                <a href="/health" style="color: #90caf9;">Health Check</a>
+                <a href="/status" style="color: #90caf9;">JSON Status</a> |
+                <a href="/health" style="color: #90caf9;">Health</a> |
+                <a href="/data" style="color: #90caf9;">JSON Data</a>
             </p>
-
             <script>
-                function toggleError(name) {
-                    const row = document.getElementById('error-' + name);
-                    row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
-                }
+                const bootstrap = {bootstrap};
+                const rows = {{}};
+
+                function fmtFields(datapoints) {{
+                    if (!datapoints || !datapoints.length) return '';
+                    return datapoints.map(dp => {{
+                        const fields = dp.fields || {{}};
+                        return Object.entries(fields).map(([k, v]) => k + ': ' + v).join('\\n');
+                    }}).join('\\n---\\n');
+                }}
+
+                function upsert(sensor) {{
+                    let tr = rows[sensor.name];
+                    if (!tr) {{
+                        tr = document.createElement('tr');
+                        tr.innerHTML = '<td class="name"></td><td class="type"></td><td class="interval"></td><td class="write"></td><td class="status"></td><td class="sample fields"></td>';
+                        document.getElementById('sensor-rows').appendChild(tr);
+                        rows[sensor.name] = tr;
+                    }}
+                    tr.querySelector('.name').textContent = sensor.name;
+                    tr.querySelector('.type').textContent = sensor.type || '';
+                    tr.querySelector('.interval').textContent = (sensor.interval ?? '') + 's';
+                    tr.querySelector('.write').textContent = sensor.write_interval == null ? 'every sample' : (sensor.write_interval + 's');
+                    const status = tr.querySelector('.status');
+                    status.textContent = sensor.healthy ? 'OK' : (sensor.error_type === 1 ? 'WARNING' : 'ERROR');
+                    status.className = 'status ' + (sensor.healthy ? 'ok' : (sensor.error_type === 1 ? 'warning' : 'error'));
+                    if (sensor.fieldsText !== undefined) {{
+                        tr.querySelector('.sample').textContent = sensor.fieldsText;
+                    }}
+                }}
+
+                bootstrap.sensors.forEach(upsert);
+                document.getElementById('active-count').textContent = bootstrap.sensors.length;
+
+                function connect() {{
+                    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                    const ws = new WebSocket(proto + '://' + location.host + '/ws');
+                    const state = document.getElementById('ws-state');
+                    ws.onopen = () => {{ state.textContent = 'connected'; }};
+                    ws.onclose = () => {{
+                        state.textContent = 'disconnected — retrying';
+                        setTimeout(connect, 1500);
+                    }};
+                    ws.onerror = () => {{ state.textContent = 'error'; }};
+                    ws.onmessage = (ev) => {{
+                        const msg = JSON.parse(ev.data);
+                        document.getElementById('last-event').textContent = msg.timestamp || '';
+                        const existing = bootstrap.sensors.find(s => s.name === msg.sensor) || {{ name: msg.sensor }};
+                        existing.healthy = msg.healthy;
+                        existing.error_type = msg.error_type;
+                        if (msg.datapoints) existing.fieldsText = fmtFields(msg.datapoints);
+                        upsert(existing);
+                    }};
+                }}
+                connect();
             </script>
         </body>
         </html>
@@ -240,6 +299,7 @@ class StatusServer:
         app.router.add_get("/health", self.health)
         app.router.add_get("/status", self.status)
         app.router.add_get("/", self.html_status)
+        app.router.add_get("/ws", self.websocket)
         if self.expose_data:
             app.router.add_get("/data", self.latest_data)
             app.router.add_get("/data/{sensor}", self.latest_data)
@@ -252,6 +312,7 @@ class StatusServer:
         self.runner = runner
         log.success(f"🌐 Status server running on http://0.0.0.0:{self.port}")
         log.info(f"→ Dashboard: http://localhost:{self.port}/")
+        log.info(f"→ Live WS:   ws://localhost:{self.port}/ws")
 
     async def stop(self):
         if self.runner:

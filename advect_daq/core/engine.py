@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 
 from daq_tools.models import DataPoint
 
@@ -7,6 +8,19 @@ from .base import BaseSensor, SensorErrorType, SensorResult
 from .config import AdvectConfig
 from .logging import log
 from .writer import AsyncJsonlWriter
+
+
+@dataclass
+class LiveEvent:
+    """Fan-out payload for live-view subscribers. No backlog — drop if busy."""
+
+    type: str
+    sensor: str
+    datapoints: list[DataPoint]
+    success: bool
+    error_type: SensorErrorType
+    error_message: str | None
+    healthy: bool
 
 
 class AdvectEngine:
@@ -19,6 +33,42 @@ class AdvectEngine:
         self.tasks: dict[str, asyncio.Task] = {}
         self.last_success: dict[str, float] = {}  # sensor_name -> timestamp
         self.latest_data: dict[str, list[DataPoint]] = {}
+        self._last_write: dict[str, float] = {}
+        self._live_subscribers: set[asyncio.Queue[LiveEvent]] = set()
+
+    def subscribe_live(self) -> asyncio.Queue[LiveEvent]:
+        queue: asyncio.Queue[LiveEvent] = asyncio.Queue(maxsize=25)
+        self._live_subscribers.add(queue)
+        return queue
+
+    def unsubscribe_live(self, queue: asyncio.Queue[LiveEvent]) -> None:
+        self._live_subscribers.discard(queue)
+
+    def _publish_live(self, event: LiveEvent) -> None:
+        stale: list[asyncio.Queue[LiveEvent]] = []
+        for queue in self._live_subscribers:
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    stale.append(queue)
+        for queue in stale:
+            self.unsubscribe_live(queue)
+
+    def _should_write(self, sensor: BaseSensor, now: float) -> bool:
+        write_interval = sensor.config.write_interval
+        if write_interval is None or write_interval <= sensor.interval:
+            return True
+        last = self._last_write.get(sensor.name)
+        if last is None:
+            return True
+        return (now - last) >= write_interval
 
     async def initialize(self) -> None:
         """Initialize writer and all enabled sensors."""
@@ -58,26 +108,42 @@ class AdvectEngine:
         while True:
             try:
                 result: SensorResult = await sensor.read()
+                now = asyncio.get_running_loop().time()
+                usable = (
+                    result.success or result.error_type <= SensorErrorType.DATA_QUALITY
+                )
 
-                for dp in result.datapoints:
-                    await self.writer.write(dp)
+                if usable:
+                    self.latest_data[sensor.name] = result.datapoints[:]
+                    self.last_success[sensor.name] = now
+                    if result.success:
+                        sensor.record_success()
+                    else:
+                        sensor.record_error(
+                            result.error_type, result.error_message or "Unknown error"
+                        )
+                    backoff = 1.0
 
-                if result.success:
-                    self.latest_data[sensor.name] = result.datapoints[:]
-                    sensor.record_success()
-                    self.last_success[sensor.name] = asyncio.get_running_loop().time()
-                    backoff = 1.0
-                elif result.error_type <= SensorErrorType.DATA_QUALITY:
-                    self.latest_data[sensor.name] = result.datapoints[:]
-                    sensor.record_error(
-                        result.error_type, result.error_message or "Unknown error"
-                    )
-                    self.last_success[sensor.name] = asyncio.get_running_loop().time()
-                    backoff = 1.0
+                    if self._should_write(sensor, now):
+                        for dp in result.datapoints:
+                            await self.writer.write(dp)
+                        self._last_write[sensor.name] = now
                 else:
                     sensor.record_error(
                         result.error_type, result.error_message or "Unknown error"
                     )
+
+                self._publish_live(
+                    LiveEvent(
+                        type="sample" if usable else "status",
+                        sensor=sensor.name,
+                        datapoints=result.datapoints[:],
+                        success=result.success,
+                        error_type=result.error_type,
+                        error_message=result.error_message,
+                        healthy=sensor.healthy,
+                    )
+                )
 
                 await asyncio.sleep(sensor.interval)
 
@@ -87,6 +153,17 @@ class AdvectEngine:
                 raise
             except Exception as e:
                 log.error(f"Error in sensor {sensor.name}: {e}", exc_info=True)
+                self._publish_live(
+                    LiveEvent(
+                        type="status",
+                        sensor=sensor.name,
+                        datapoints=[],
+                        success=False,
+                        error_type=SensorErrorType.UNKNOWN,
+                        error_message=str(e),
+                        healthy=False,
+                    )
+                )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
 
