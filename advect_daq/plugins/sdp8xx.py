@@ -122,7 +122,7 @@ class SDP8xxSensor(BaseSensor):
 
         self.tags["address"] = hex(self.i2c_address)
         self.tags["i2c_bus"] = str(self.i2c_bus)
-        self.tags["temp_comp"] = self.temp_comp
+        # self.tags["temp_comp"] = self.temp_comp
 
         self._bus: SMBus | None = None
         self._start_cmd = self._select_start_command()
@@ -177,7 +177,7 @@ class SDP8xxSensor(BaseSensor):
         model = info.get("model", f"SDP8xx-{product:#010x}")
         range_pa = info.get("range_pa")
 
-        self.tags["product_id"] = f"{product:#010x}"
+        # self.tags["product_id"] = f"{product:#010x}"
         self.tags["serial"] = f"{serial:016x}"
         self.tags["model"] = model
         if range_pa is not None:
@@ -270,16 +270,14 @@ class SDP8xxSensor(BaseSensor):
 
         sample_time = dt.datetime.now(dt.UTC).timestamp()
         try:
-            dp_pa, temp_c, scale = await asyncio.to_thread(self._sync_read_frame)
+            dp_pa, temp_c, _ = await asyncio.to_thread(self._sync_read_frame)
             dp = DataPoint(
                 time=sample_time,
                 measurement=self.measurement,
                 tags=self.tags,
                 fields={
-                    "differential_pressure_pa": round(dp_pa, 4),
-                    "temperature_c": round(temp_c, 3),
-                    "scale_factor": scale,
-                    "error_code": 0,
+                    "diff_pressure_pa": round(dp_pa, 4),
+                    "temp_c": round(temp_c, 3),
                 },
             )
             return SensorResult(datapoints=[dp])
@@ -290,10 +288,8 @@ class SDP8xxSensor(BaseSensor):
                 measurement=self.measurement,
                 tags=self.tags,
                 fields={
-                    "differential_pressure_pa": None,
-                    "temperature_c": None,
-                    "scale_factor": None,
-                    "error_code": 99,
+                    "diff_pressure_pa": None,
+                    "temp_c": None,
                 },
             )
             return SensorResult(

@@ -179,6 +179,7 @@ class StatusServer:
                 .header {{ margin-bottom: 20px; }}
                 table {{
                     border-collapse: collapse;
+                    table-layout: fixed;
                     width: 100%;
                     background: var(--card);
                     border-radius: 8px;
@@ -195,12 +196,28 @@ class StatusServer:
                     background: #1f2937;
                     color: #90caf9;
                 }}
+                th:nth-child(1) {{ width: 16%; }}
+                th:nth-child(2) {{ width: 12%; }}
+                th:nth-child(3), th:nth-child(4) {{ width: 9%; }}
+                th:nth-child(5) {{ width: 8%; }}
+                th:nth-child(6) {{ width: 46%; }}
                 tr:hover {{ background: #252d3f; }}
                 .ok {{ color: #66ff99; font-weight: bold; }}
                 .warning {{ color: #ffcc33; font-weight: bold; }}
                 .error {{ color: #ff6666; font-weight: bold; }}
                 .muted {{ color: var(--text-muted); }}
-                .fields {{ font-family: monospace; font-size: 0.85em; white-space: pre-wrap; }}
+                .written {{ color: #90caf9; font-size: 0.75em; margin-left: 8px; }}
+                .field-grid {{
+                    display: grid;
+                    grid-template-columns: minmax(10ch, 1fr) 14ch;
+                    column-gap: 12px;
+                    row-gap: 2px;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-size: 0.85em;
+                    font-variant-numeric: tabular-nums;
+                }}
+                .field-k {{ color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+                .field-v {{ text-align: right; white-space: nowrap; }}
                 .refresh {{ color: var(--text-muted); font-size: 0.9em; }}
             </style>
         </head>
@@ -232,31 +249,48 @@ class StatusServer:
                 const bootstrap = {bootstrap};
                 const rows = {{}};
 
-                function fmtFields(datapoints) {{
+                function fmtNum(v) {{
+                    if (v === null || v === undefined) return '—';
+                    if (typeof v === 'number' && Number.isFinite(v)) {{
+                        const abs = Math.abs(v);
+                        const digits = abs >= 1000 ? 1 : abs >= 10 ? 2 : 4;
+                        return v.toFixed(digits);
+                    }}
+                    return String(v);
+                }}
+
+                function fieldGridHtml(datapoints) {{
                     if (!datapoints || !datapoints.length) return '';
-                    return datapoints.map(dp => {{
+                    const rowsHtml = [];
+                    datapoints.forEach(dp => {{
                         const fields = dp.fields || {{}};
-                        return Object.entries(fields).map(([k, v]) => k + ': ' + v).join('\\n');
-                    }}).join('\\n---\\n');
+                        Object.keys(fields).forEach(k => {{
+                            rowsHtml.push(
+                                '<div class="field-k">' + k + '</div>' +
+                                '<div class="field-v">' + fmtNum(fields[k]) + '</div>'
+                            );
+                        }});
+                    }});
+                    return '<div class="field-grid">' + rowsHtml.join('') + '</div>';
                 }}
 
                 function upsert(sensor) {{
                     let tr = rows[sensor.name];
                     if (!tr) {{
                         tr = document.createElement('tr');
-                        tr.innerHTML = '<td class="name"></td><td class="type"></td><td class="interval"></td><td class="write"></td><td class="status"></td><td class="sample fields"></td>';
+                        tr.innerHTML = '<td class="name"></td><td class="type"></td><td class="interval"></td><td class="write"></td><td class="status"></td><td class="sample"></td>';
                         document.getElementById('sensor-rows').appendChild(tr);
                         rows[sensor.name] = tr;
                     }}
-                    tr.querySelector('.name').textContent = sensor.name;
+                    tr.querySelector('.name').innerHTML = sensor.name + (sensor.written ? '<span class="written">write</span>' : '');
                     tr.querySelector('.type').textContent = sensor.type || '';
                     tr.querySelector('.interval').textContent = (sensor.interval ?? '') + 's';
                     tr.querySelector('.write').textContent = sensor.write_interval == null ? 'every sample' : (sensor.write_interval + 's');
                     const status = tr.querySelector('.status');
                     status.textContent = sensor.healthy ? 'OK' : (sensor.error_type === 1 ? 'WARNING' : 'ERROR');
                     status.className = 'status ' + (sensor.healthy ? 'ok' : (sensor.error_type === 1 ? 'warning' : 'error'));
-                    if (sensor.fieldsText !== undefined) {{
-                        tr.querySelector('.sample').textContent = sensor.fieldsText;
+                    if (sensor.fieldsHtml !== undefined) {{
+                        tr.querySelector('.sample').innerHTML = sensor.fieldsHtml;
                     }}
                 }}
 
@@ -279,7 +313,8 @@ class StatusServer:
                         const existing = bootstrap.sensors.find(s => s.name === msg.sensor) || {{ name: msg.sensor }};
                         existing.healthy = msg.healthy;
                         existing.error_type = msg.error_type;
-                        if (msg.datapoints) existing.fieldsText = fmtFields(msg.datapoints);
+                        existing.written = !!msg.written;
+                        if (msg.datapoints) existing.fieldsHtml = fieldGridHtml(msg.datapoints);
                         upsert(existing);
                     }};
                 }}
