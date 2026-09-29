@@ -6,8 +6,7 @@ from dataclasses import asdict
 from aiohttp import WSMsgType, web
 from daq_tools.models import DataPoint
 
-from .base import SensorErrorType
-from .engine import AdvectEngine, LiveEvent
+from .engine import AdvectEngine, LatestReading
 from .logging import log
 
 
@@ -18,18 +17,19 @@ def _datapoint_to_dict(dp: DataPoint):
         return {}
 
 
-def _event_to_dict(event: LiveEvent, include_data: bool) -> dict:
+def _reading_to_dict(reading: LatestReading, include_data: bool) -> dict:
     payload = {
-        "type": event.type,
-        "sensor": event.sensor,
-        "success": event.success,
-        "healthy": event.healthy,
-        "error_type": int(event.error_type),
-        "error_message": event.error_message,
+        "type": reading.type,
+        "sensor": reading.sensor,
+        "written": reading.written,
+        "success": reading.success,
+        "healthy": reading.healthy,
+        "error_type": int(reading.error_type),
+        "error_message": reading.error_message,
         "timestamp": dt.datetime.now(dt.UTC).isoformat(),
     }
     if include_data:
-        payload["datapoints"] = [_datapoint_to_dict(dp) for dp in event.datapoints]
+        payload["datapoints"] = [_datapoint_to_dict(dp) for dp in reading.datapoints]
     return payload
 
 
@@ -56,22 +56,18 @@ class StatusServer:
         sensor_name = request.query.get("sensor") or request.match_info.get("sensor")
 
         if sensor_name:
-            if sensor_name not in self.engine.latest_data:
+            reading = self.engine.latest.get(sensor_name)
+            if reading is None:
                 return web.json_response(
                     {"error": f"Sensor '{sensor_name}' not found or has no data yet"},
                     status=404,
                 )
-            data = {
-                sensor_name: [
-                    _datapoint_to_dict(d)
-                    for d in self.engine.latest_data.get(sensor_name)
-                ]
-            }
+            data = {sensor_name: [_datapoint_to_dict(d) for d in reading.datapoints]}
 
         else:
             data = {
-                sensor_name: [_datapoint_to_dict(d) for d in dps]
-                for sensor_name, dps in self.engine.latest_data.items()
+                name: [_datapoint_to_dict(d) for d in reading.datapoints]
+                for name, reading in self.engine.latest.items()
             }
 
         return web.json_response(
@@ -87,8 +83,8 @@ class StatusServer:
         sensors_status = []
 
         for name, sensor in self.engine.sensors.items():
-            last = self.engine.last_success.get(name, 0)
-            age = now - last if last > 0 else None
+            reading = self.engine.latest.get(name)
+            age = (now - reading.loop_time) if reading is not None else None
             sensor_type = getattr(getattr(sensor, "config", None), "type", "unknown")
             write_interval = getattr(
                 getattr(sensor, "config", None), "write_interval", None
@@ -131,7 +127,7 @@ class StatusServer:
         async def pump():
             while not ws.closed:
                 event = await queue.get()
-                payload = _event_to_dict(event, include_data=self.expose_data)
+                payload = _reading_to_dict(event, include_data=self.expose_data)
                 await ws.send_json(payload)
 
         pump_task = asyncio.create_task(pump())
