@@ -206,7 +206,6 @@ class StatusServer:
                 .warning {{ color: #ffcc33; font-weight: bold; }}
                 .error {{ color: #ff6666; font-weight: bold; }}
                 .muted {{ color: var(--text-muted); }}
-                .written {{ color: #90caf9; font-size: 0.75em; margin-left: 8px; }}
                 .field-grid {{
                     display: grid;
                     grid-template-columns: minmax(10ch, 1fr) 14ch;
@@ -282,7 +281,7 @@ class StatusServer:
                         document.getElementById('sensor-rows').appendChild(tr);
                         rows[sensor.name] = tr;
                     }}
-                    tr.querySelector('.name').innerHTML = sensor.name + (sensor.written ? '<span class="written">write</span>' : '');
+                    tr.querySelector('.name').textContent = sensor.name;
                     tr.querySelector('.type').textContent = sensor.type || '';
                     tr.querySelector('.interval').textContent = (sensor.interval ?? '') + 's';
                     tr.querySelector('.write').textContent = sensor.write_interval == null ? 'every sample' : (sensor.write_interval + 's');
@@ -313,7 +312,6 @@ class StatusServer:
                         const existing = bootstrap.sensors.find(s => s.name === msg.sensor) || {{ name: msg.sensor }};
                         existing.healthy = msg.healthy;
                         existing.error_type = msg.error_type;
-                        existing.written = !!msg.written;
                         if (msg.datapoints) existing.fieldsHtml = fieldGridHtml(msg.datapoints);
                         upsert(existing);
                     }};

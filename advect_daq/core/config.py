@@ -34,6 +34,7 @@ class SensorConfig:
     type: str
     name: str = ""
     interval: float = 1.0
+    live_update_skip: int = 0
     write_interval: float | None = None
     measurement: str = ""
     tags: dict[str, str] = field(default_factory=dict)
@@ -141,6 +142,7 @@ class AdvectConfig:
                 type=sensor_type,
                 name=base_name,
                 interval=float(s.get("interval", 1.0)),
+                live_update_skip=int(s.get("live_update_skip", 0)),
                 write_interval=write_interval,
                 measurement=s.get("measurement", ""),
                 tags=s.get("tags", {}),
@@ -151,6 +153,7 @@ class AdvectConfig:
                 "type",
                 "name",
                 "interval",
+                "live_update_skip",
                 "write_interval",
                 "measurement",
                 "tags",

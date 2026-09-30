@@ -108,6 +108,13 @@ class SDP8xxSensor(BaseSensor):
         ).lower()
         self.averaging: bool = bool(extra.get("averaging", True))
         self.soft_reset: bool = bool(extra.get("soft_reset", False))
+        raw_alpha = extra.get("ewm_alpha", 0.25)
+        self.ewm_alpha: float = float(raw_alpha)
+        if not 0.0 < self.ewm_alpha <= 1.0:
+            raise ValueError(
+                f"[{self.name}] ewm_alpha must be in (0, 1], got {self.ewm_alpha}"
+            )
+        self._ewm_dp: float | None = None
 
         if self.temp_comp not in {"differential_pressure", "mass_flow"}:
             raise ValueError(
@@ -271,12 +278,18 @@ class SDP8xxSensor(BaseSensor):
         sample_time = dt.datetime.now(dt.UTC).timestamp()
         try:
             dp_pa, temp_c, _ = await asyncio.to_thread(self._sync_read_frame)
+            if self._ewm_dp is None:
+                self._ewm_dp = dp_pa
+            else:
+                a = self.ewm_alpha
+                self._ewm_dp = a * dp_pa + (1.0 - a) * self._ewm_dp
             dp = DataPoint(
                 time=sample_time,
                 measurement=self.measurement,
                 tags=self.tags,
                 fields={
                     "diff_pressure_pa": round(dp_pa, 4),
+                    "diff_pressure_pa_ewm": round(self._ewm_dp, 4),
                     "temp_c": round(temp_c, 3),
                 },
             )
@@ -289,6 +302,9 @@ class SDP8xxSensor(BaseSensor):
                 tags=self.tags,
                 fields={
                     "diff_pressure_pa": None,
+                    "diff_pressure_pa_ewm": (
+                        None if self._ewm_dp is None else round(self._ewm_dp, 4)
+                    ),
                     "temp_c": None,
                 },
             )

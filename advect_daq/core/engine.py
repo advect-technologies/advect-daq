@@ -116,6 +116,8 @@ class AdvectEngine:
         """Run periodic reads for a single sensor with backoff."""
         backoff = 1.0
         max_backoff = 60.0
+        live_update_skip = sensor.config.live_update_skip
+        live_update_count = 0
 
         while True:
             try:
@@ -143,7 +145,11 @@ class AdvectEngine:
                     healthy=sensor.healthy,
                 )
                 self.latest[sensor.name] = reading
-                self._publish_live(reading)
+
+                if live_update_count >= live_update_skip:
+                    self._publish_live(reading)
+                    live_update_count = 0
+                live_update_count += 1
 
                 await asyncio.sleep(sensor.interval)
 
