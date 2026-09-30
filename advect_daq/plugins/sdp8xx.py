@@ -118,6 +118,7 @@ class SDP8xxSensor(BaseSensor):
         self.simple_avg_count: int = int(extra.get("simple_avg_count", 0))
         self.calc_simple_avg: bool = bool(self.simple_avg_count)
         self._simple_avg_sum: float = 0.0
+        self._avg_dp_pa: float | None = None
         self._read_count: int = 0
 
         if self.temp_comp not in {"differential_pressure", "mass_flow"}:
@@ -291,11 +292,9 @@ class SDP8xxSensor(BaseSensor):
             if self.calc_simple_avg:
                 self._simple_avg_sum += dp_pa
                 self._read_count += 1
-                avg_dp_pa = self._simple_avg_sum / self._read_count
-            else:
-                avg_dp_pa = None
 
             if self.calc_simple_avg and self._read_count >= self.simple_avg_count:
+                self._avg_dp_pa = self._simple_avg_sum / self._read_count
                 self._simple_avg_sum = dp_pa
                 self._read_count = 1
 
@@ -307,8 +306,8 @@ class SDP8xxSensor(BaseSensor):
                     "diff_pressure_pa": round(dp_pa, 4),
                     "diff_pressure_pa_ewm": round(self._ewm_dp, 4),
                     "temp_c": round(temp_c, 3),
-                    "diff_pressure_pa_avg": round(avg_dp_pa, 4)
-                    if avg_dp_pa is not None
+                    "diff_pressure_pa_avg": round(self._avg_dp_pa, 4)
+                    if self._avg_dp_pa is not None
                     else None,
                     "scale_factor": scale,
                 },
