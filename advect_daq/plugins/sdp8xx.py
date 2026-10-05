@@ -120,6 +120,7 @@ class SDP8xxSensor(BaseSensor):
         self._simple_avg_sum: float = 0.0
         self._avg_dp_pa: float | None = None
         self._read_count: int = 0
+        self._correction_factor: float = float(extra.get("correction_factor", 1.0))
 
         if self.temp_comp not in {"differential_pressure", "mass_flow"}:
             raise ValueError(
@@ -245,7 +246,7 @@ class SDP8xxSensor(BaseSensor):
         if scale == 0:
             raise RuntimeError("sensor reported scale factor 0")
 
-        dp_pa = _s16(dp_m, dp_l) / scale
+        dp_pa = _s16(dp_m, dp_l) / scale * self._correction_factor
         temp_c = _s16(t_m, t_l) / _TEMP_SCALE
         return dp_pa, temp_c, scale
 
