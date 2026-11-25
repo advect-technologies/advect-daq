@@ -12,6 +12,7 @@ and the previously validated standalone reader.
 from __future__ import annotations
 
 import datetime as dt
+from math import isnan
 from typing import Any, Final
 
 from daq_tools.models import DataPoint
@@ -44,6 +45,10 @@ _DEFAULT_BYTESIZE: Final[int] = 8
 _DEFAULT_DEVICE_ID: Final[int] = 1
 _DEFAULT_TIMEOUT: Final[float] = 3.0
 _WORD_ORDER: Final[str] = "big"  # ABCD / Big Endian
+
+
+def is_none_or_nan(val) -> bool:
+    return val is None or (isinstance(val, float) and isnan(val))
 
 
 def _parse_int(value: Any, default: int) -> int:
@@ -182,7 +187,11 @@ class VA526Sensor(BaseSensor):
             any_success = False
             for name, address in REGISTERS.items():
                 value = await self._read_one(name, address)
-                fields[name] = None if value is None else round(value, 4)
+                fields[name] = (
+                    None
+                    if value is None or (isinstance(value, float) and isnan(value))
+                    else round(value, 4)
+                )
                 if value is not None:
                     any_success = True
 
