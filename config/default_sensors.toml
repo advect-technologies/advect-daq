@@ -35,3 +35,20 @@ interval = 1
 live_update_skip = 5
 write_interval = 60
 enabled = true
+
+# Example CS Instruments VA 526 (Modbus RTU). Uncomment and set port.
+# [[sensors]]
+# type = "va526"
+# name = "va526_main"
+# measurement = "flow"
+# interval = 5.0
+# live_update_skip = 0
+# write_interval = 30
+# enabled = true
+# port = "/dev/ttyUSB0"
+# baudrate = 19200
+# parity = "E"
+# stopbits = 1
+# bytesize = 8
+# device_id = 1
+# timeout = 3.0
