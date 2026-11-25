@@ -90,9 +90,7 @@ class VA526Sensor(BaseSensor):
         self.timeout: float = float(extra.get("timeout", _DEFAULT_TIMEOUT))
 
         if self.parity not in {"N", "E", "O"}:
-            raise ValueError(
-                f"[{self.name}] parity must be N/E/O, got {self.parity!r}"
-            )
+            raise ValueError(f"[{self.name}] parity must be N/E/O, got {self.parity!r}")
         if self.stopbits not in {1, 2}:
             raise ValueError(
                 f"[{self.name}] stopbits must be 1 or 2, got {self.stopbits}"
@@ -108,8 +106,6 @@ class VA526Sensor(BaseSensor):
 
         self.tags["port"] = self.port
         self.tags["device_id"] = str(self.device_id)
-        self.tags["baudrate"] = str(self.baudrate)
-        self.tags["parity"] = self.parity
 
         self._client: AsyncModbusSerialClient | None = None
 
@@ -167,8 +163,7 @@ class VA526Sensor(BaseSensor):
             return _decode_float(response.registers)
         except ModbusException as exc:
             log.error(
-                f"[{self.name}] Modbus exception reading {name} "
-                f"(addr {address}): {exc}"
+                f"[{self.name}] Modbus exception reading {name} (addr {address}): {exc}"
             )
             return None
         except Exception as exc:
