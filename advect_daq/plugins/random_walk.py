@@ -25,8 +25,8 @@ class RandomSensor(BaseSensor):
         # Random walk
         self.values = [round(v + random.gauss(0, 0.5), 3) for v in self.values]
 
-        num_values = random.randint(1, self.max_values)
-        fields = {f"value_{i}": self.values[i] for i in range(num_values)}
+        # num_values = random.randint(1, self.max_values)
+        fields = {f"value_{i}": self.values[i] for i in range(self.max_values)}
         fields["error_code"] = 0
 
         dp = DataPoint(

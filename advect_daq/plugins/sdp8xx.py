@@ -287,8 +287,9 @@ class SDP8xxSensor(BaseSensor):
             if self._ewm_dp is None:
                 self._ewm_dp = dp_pa
             else:
-                a = self.ewm_alpha
-                self._ewm_dp = a * dp_pa + (1.0 - a) * self._ewm_dp
+                self._ewm_dp = (
+                    self.ewm_alpha * dp_pa + (1.0 - self.ewm_alpha) * self._ewm_dp
+                )
 
             if self.calc_simple_avg:
                 self._simple_avg_sum += dp_pa

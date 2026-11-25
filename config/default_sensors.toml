@@ -22,12 +22,16 @@ flush_interval = 30.0
 type = "random_walk"
 name = "test_sensor_1"
 measurement = "random_walk"
-interval = 10
+interval = 0.25
+live_update_skip = 4
+write_interval = 60
 enabled = true
 
 [[sensors]]
 type = "random_walk"
 measurement = "random_walk"
 name = "test_sensor_2"
-interval = 10
+interval = 1
+live_update_skip = 5
+write_interval = 60
 enabled = true
