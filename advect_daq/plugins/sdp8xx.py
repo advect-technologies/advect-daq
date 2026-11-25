@@ -108,6 +108,19 @@ class SDP8xxSensor(BaseSensor):
         ).lower()
         self.averaging: bool = bool(extra.get("averaging", True))
         self.soft_reset: bool = bool(extra.get("soft_reset", False))
+        raw_alpha = extra.get("ewm_alpha", 0.25)
+        self.ewm_alpha: float = float(raw_alpha)
+        if not 0.0 < self.ewm_alpha <= 1.0:
+            raise ValueError(
+                f"[{self.name}] ewm_alpha must be in (0, 1], got {self.ewm_alpha}"
+            )
+        self._ewm_dp: float | None = None
+        self.simple_avg_count: int = int(extra.get("simple_avg_count", 0))
+        self.calc_simple_avg: bool = bool(self.simple_avg_count)
+        self._simple_avg_sum: float = 0.0
+        self._avg_dp_pa: float | None = None
+        self._read_count: int = 0
+        self._correction_factor: float = float(extra.get("correction_factor", 1.0))
 
         if self.temp_comp not in {"differential_pressure", "mass_flow"}:
             raise ValueError(
@@ -122,7 +135,7 @@ class SDP8xxSensor(BaseSensor):
 
         self.tags["address"] = hex(self.i2c_address)
         self.tags["i2c_bus"] = str(self.i2c_bus)
-        self.tags["temp_comp"] = self.temp_comp
+        # self.tags["temp_comp"] = self.temp_comp
 
         self._bus: SMBus | None = None
         self._start_cmd = self._select_start_command()
@@ -177,7 +190,7 @@ class SDP8xxSensor(BaseSensor):
         model = info.get("model", f"SDP8xx-{product:#010x}")
         range_pa = info.get("range_pa")
 
-        self.tags["product_id"] = f"{product:#010x}"
+        # self.tags["product_id"] = f"{product:#010x}"
         self.tags["serial"] = f"{serial:016x}"
         self.tags["model"] = model
         if range_pa is not None:
@@ -233,7 +246,7 @@ class SDP8xxSensor(BaseSensor):
         if scale == 0:
             raise RuntimeError("sensor reported scale factor 0")
 
-        dp_pa = _s16(dp_m, dp_l) / scale
+        dp_pa = _s16(dp_m, dp_l) / scale * self._correction_factor
         temp_c = _s16(t_m, t_l) / _TEMP_SCALE
         return dp_pa, temp_c, scale
 
@@ -271,15 +284,34 @@ class SDP8xxSensor(BaseSensor):
         sample_time = dt.datetime.now(dt.UTC).timestamp()
         try:
             dp_pa, temp_c, scale = await asyncio.to_thread(self._sync_read_frame)
+            if self._ewm_dp is None:
+                self._ewm_dp = dp_pa
+            else:
+                self._ewm_dp = (
+                    self.ewm_alpha * dp_pa + (1.0 - self.ewm_alpha) * self._ewm_dp
+                )
+
+            if self.calc_simple_avg:
+                self._simple_avg_sum += dp_pa
+                self._read_count += 1
+
+            if self.calc_simple_avg and self._read_count >= self.simple_avg_count:
+                self._avg_dp_pa = self._simple_avg_sum / self._read_count
+                self._simple_avg_sum = dp_pa
+                self._read_count = 1
+
             dp = DataPoint(
                 time=sample_time,
                 measurement=self.measurement,
                 tags=self.tags,
                 fields={
-                    "differential_pressure_pa": round(dp_pa, 4),
-                    "temperature_c": round(temp_c, 3),
+                    "diff_pressure_pa": round(dp_pa, 4),
+                    "diff_pressure_pa_ewm": round(self._ewm_dp, 4),
+                    "temp_c": round(temp_c, 3),
+                    "diff_pressure_pa_avg": round(self._avg_dp_pa, 4)
+                    if self._avg_dp_pa is not None
+                    else None,
                     "scale_factor": scale,
-                    "error_code": 0,
                 },
             )
             return SensorResult(datapoints=[dp])
@@ -290,10 +322,12 @@ class SDP8xxSensor(BaseSensor):
                 measurement=self.measurement,
                 tags=self.tags,
                 fields={
-                    "differential_pressure_pa": None,
-                    "temperature_c": None,
-                    "scale_factor": None,
-                    "error_code": 99,
+                    "diff_pressure_pa": None,
+                    "diff_pressure_pa_ewm": (
+                        None if self._ewm_dp is None else round(self._ewm_dp, 4)
+                    ),
+                    "temp_c": None,
+                    "diff_pressure_pa_avg": None,
                 },
             )
             return SensorResult(
